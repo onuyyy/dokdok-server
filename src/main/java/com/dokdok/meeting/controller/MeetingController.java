@@ -3,6 +3,7 @@ package com.dokdok.meeting.controller;
 import com.dokdok.global.response.ApiResponse;
 import com.dokdok.meeting.api.MeetingApi;
 import com.dokdok.meeting.dto.MeetingCreateRequest;
+import com.dokdok.meeting.dto.MeetingDetailResponse;
 import com.dokdok.meeting.dto.MeetingResponse;
 import com.dokdok.meeting.dto.MeetingStatusResponse;
 import com.dokdok.meeting.dto.MeetingTabCountsResponse;
@@ -24,7 +25,7 @@ public class MeetingController implements MeetingApi {
 
     @Override
     @GetMapping(value = "/{meetingId}", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<ApiResponse<MeetingResponse>> findMeeting(
+    public ResponseEntity<ApiResponse<MeetingDetailResponse>> findMeeting(
             @PathVariable Long meetingId
     ) {
         return ApiResponse.success(meetingService.findMeeting(meetingId), "약속 상세 조회에 성공했습니다.");

@@ -1,6 +1,10 @@
 spring:
   application:
     name: dokdok
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 10MB
   datasource:
     hikari:
       maximum-pool-size: 20  # 최대 커넥션 수
@@ -9,12 +13,17 @@ spring:
       idle-timeout: 600000   # 유휴 커넥션 유지 시간 (10분)
       max-lifetime: 1800000  # 커넥션 최대 수명 (30분)
       leak-detection-threshold: 60000  # 커넥션 누수 감지 (1분)
-
 app:
   frontend:
-    default-url: http://localhost:3000
+    default-url: http://localhost:5173
     allowed-origins:
-      - http://localhost:3000
       - http://localhost:5173
-      - https://yourdomain.com
-      - https://dev.yourdomain.com
+      - localhost:5173
+      - dokdok.site
+      - https://dokdok.site
+      - https://www.dokdok.site
+      - https://dev.dokdok.site
+ai:
+  api:
+    base-url: ${AI_API_BASE_URL:http://localhost:8000}
+    summary-path: ${AI_API_SUMMARY_PATH:/summaries/topics}

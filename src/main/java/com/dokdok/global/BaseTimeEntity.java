@@ -44,4 +44,8 @@ public abstract class BaseTimeEntity {
     public boolean isDeleted() {
         return this.deletedAt != null;
     }
+
+    protected void touch() {
+        this.updatedAt = LocalDateTime.now();
+    }
 }

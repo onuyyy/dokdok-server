@@ -4,6 +4,7 @@ import com.dokdok.book.entity.PersonalReadingRecord;
 import com.dokdok.book.entity.RecordType;
 import lombok.Builder;
 
+import java.time.LocalDateTime;
 import java.util.Map;
 
 @Builder
@@ -12,7 +13,8 @@ public record PersonalReadingRecordListResponse(
         RecordType recordType,
         String recordContent,
         Map<String, Object> meta,
-        Long personalBookId
+        LocalDateTime createdAt,
+        Long bookId
 ) {
     public static PersonalReadingRecordListResponse from(PersonalReadingRecord record) {
         return PersonalReadingRecordListResponse.builder()
@@ -20,7 +22,8 @@ public record PersonalReadingRecordListResponse(
                 .recordType(record.getRecordType())
                 .recordContent(record.getRecordContent())
                 .meta(record.getMeta())
-                .personalBookId(record.getPersonalBook().getId())
+                .createdAt(record.getCreatedAt())
+                .bookId(record.getPersonalBook().getBook().getId())
                 .build();
     }
 }

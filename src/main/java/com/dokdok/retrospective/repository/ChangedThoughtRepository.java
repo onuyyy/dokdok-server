@@ -16,6 +16,7 @@ public interface ChangedThoughtRepository extends JpaRepository<RetrospectiveCha
             FROM RetrospectiveChangedThought ct
             JOIN FETCH ct.topic t
             WHERE ct.personalMeetingRetrospective.id = :retrospectiveId
+            ORDER BY t.confirmOrder
             """)
     List<RetrospectiveChangedThought> findByPersonalMeetingRetrospective(Long retrospectiveId);
 
@@ -23,6 +24,8 @@ public interface ChangedThoughtRepository extends JpaRepository<RetrospectiveCha
             SELECT new com.dokdok.retrospective.dto.projection.ChangedThoughtProjection(
                         pmr.id,
                         t.id,
+                        t.title,
+                        t.confirmOrder,
                         ct.keyIssue,
                         ct.postOpinion
             )
@@ -30,6 +33,7 @@ public interface ChangedThoughtRepository extends JpaRepository<RetrospectiveCha
             JOIN ct.topic t
             JOIN ct.personalMeetingRetrospective pmr
             WHERE ct.personalMeetingRetrospective.id IN :retrospectiveIds
+            ORDER BY t.confirmOrder
             """)
     List<ChangedThoughtProjection> findByRetrospectiveIds(List<Long> retrospectiveIds);
 }

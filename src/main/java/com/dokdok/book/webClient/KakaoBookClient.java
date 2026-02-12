@@ -11,11 +11,13 @@ public class KakaoBookClient {
 
     private final WebClient kakaoWebClient;
 
-    public KakaoBookResponse searchBooks(String query) {
+    public KakaoBookResponse searchBooks(String query, int page, int size) {
         return kakaoWebClient.get()
                 .uri(uriBuilder -> uriBuilder
                         .path("/v3/search/book")
                         .queryParam("query", query)
+                        .queryParam("page", page)
+                        .queryParam("size", size)
                         .build())
                 .retrieve()
                 .bodyToMono(KakaoBookResponse.class)

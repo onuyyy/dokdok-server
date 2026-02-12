@@ -1,8 +1,6 @@
 package com.dokdok.retrospective.entity;
 
 import com.dokdok.global.BaseTimeEntity;
-import com.dokdok.retrospective.exception.RetrospectiveErrorCode;
-import com.dokdok.retrospective.exception.RetrospectiveException;
 import com.dokdok.topic.entity.Topic;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -29,7 +27,7 @@ public class RetrospectiveChangedThought extends BaseTimeEntity {
     private Topic topic;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "personal_meeting_retrospective_id2", nullable = false)
+    @JoinColumn(name = "personal_meeting_retrospective_id", nullable = false)
     private PersonalMeetingRetrospective personalMeetingRetrospective;
 
     @Column(name = "key_issue", length = 255, nullable = false)

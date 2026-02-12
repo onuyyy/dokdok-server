@@ -3,23 +3,28 @@ package com.dokdok.retrospective.service;
 import com.dokdok.gathering.entity.Gathering;
 import com.dokdok.gathering.exception.GatheringErrorCode;
 import com.dokdok.gathering.exception.GatheringException;
+import com.dokdok.global.response.CursorResponse;
 import com.dokdok.global.util.SecurityUtil;
 import com.dokdok.meeting.entity.Meeting;
 import com.dokdok.meeting.exception.MeetingErrorCode;
 import com.dokdok.meeting.exception.MeetingException;
-import com.dokdok.meeting.repository.MeetingRepository;
 import com.dokdok.meeting.service.MeetingValidator;
 import com.dokdok.oauth2.CustomOAuth2User;
 import com.dokdok.retrospective.dto.request.MeetingRetrospectiveRequest;
+import com.dokdok.retrospective.dto.response.CollectedAnswersCursor;
 import com.dokdok.retrospective.dto.response.MeetingRetrospectiveResponse;
+import com.dokdok.retrospective.dto.response.MemberAnswerResponse;
 import com.dokdok.retrospective.entity.MeetingRetrospective;
 import com.dokdok.retrospective.entity.TopicRetrospectiveSummary;
 import com.dokdok.retrospective.exception.RetrospectiveErrorCode;
 import com.dokdok.retrospective.exception.RetrospectiveException;
 import com.dokdok.retrospective.repository.RetrospectiveRepository;
 import com.dokdok.retrospective.repository.TopicRetrospectiveSummaryRepository;
+import com.dokdok.storage.service.StorageService;
 import com.dokdok.topic.entity.Topic;
+import com.dokdok.topic.entity.TopicAnswer;
 import com.dokdok.topic.entity.TopicStatus;
+import com.dokdok.topic.repository.TopicAnswerRepository;
 import com.dokdok.topic.repository.TopicRepository;
 import com.dokdok.topic.service.TopicValidator;
 import com.dokdok.user.entity.User;
@@ -30,6 +35,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -43,9 +49,6 @@ import static org.mockito.Mockito.*;
 class MeetingRetrospectiveServiceTest {
 
 	@Mock
-	private MeetingRepository meetingRepository;
-
-	@Mock
 	private TopicRepository topicRepository;
 
 	@Mock
@@ -56,6 +59,12 @@ class MeetingRetrospectiveServiceTest {
 
 	@Mock
 	private RetrospectiveRepository retrospectiveRepository;
+
+	@Mock
+	private StorageService storageService;
+
+	@Mock
+	private TopicAnswerRepository topicAnswerRepository;
 
 	@InjectMocks
 	private MeetingRetrospectiveService meetingRetrospectiveService;
@@ -131,39 +140,6 @@ class MeetingRetrospectiveServiceTest {
 	}
 
 	@Test
-	@DisplayName("확정된 토픽이 없으면 빈 목록을 반환한다")
-	void getMeetingRetrospective_withNoTopics_returnsEmptyList() {
-		Long meetingId = 1L;
-		Long userId = 1L;
-		Long gatheringId = 1L;
-
-		Gathering gathering = Gathering.builder().id(gatheringId).build();
-		Meeting meeting = Meeting.builder()
-				.id(meetingId)
-				.gathering(gathering)
-				.meetingName("모임")
-				.meetingStartDate(LocalDateTime.of(2026, 1, 15, 19, 0))
-				.meetingEndDate(LocalDateTime.of(2026, 1, 15, 21, 0))
-				.build();
-
-		try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
-			securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
-
-			when(meetingValidator.findMeetingOrThrow(meetingId)).thenReturn(meeting);
-			doNothing().when(retrospectiveValidator).validateMeetingRetrospectiveAccess(gatheringId, meetingId, userId);
-			when(topicRepository.findByMeetingIdAndTopicStatusOrderByConfirmOrderAsc(meetingId, TopicStatus.CONFIRMED))
-					.thenReturn(List.of());
-			when(topicRetrospectiveSummaryRepository.findAllByTopicIdIn(List.of())).thenReturn(List.of());
-			when(retrospectiveRepository.findAllByMeetingId(meetingId)).thenReturn(List.of());
-
-			MeetingRetrospectiveResponse response = meetingRetrospectiveService.getMeetingRetrospective(meetingId);
-
-			assertThat(response.meetingId()).isEqualTo(meetingId);
-			assertThat(response.topics()).isEmpty();
-		}
-	}
-
-	@Test
 	@DisplayName("코멘트가 없어도 정상적으로 조회한다")
 	void getMeetingRetrospective_withNoComments_success() {
 		Long meetingId = 1L;
@@ -183,7 +159,11 @@ class MeetingRetrospectiveServiceTest {
 		TopicRetrospectiveSummary summary = TopicRetrospectiveSummary.builder()
 				.id(1L)
 				.topic(topic)
-				.summarizedOpinions(List.of("요약1"))
+				.summary("요약1")
+				.keyPoints(List.of(new TopicRetrospectiveSummary.KeyPoint(
+						"핵심 포인트",
+						List.of("포인트 상세")
+				)))
 				.build();
 
 		try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
@@ -194,13 +174,13 @@ class MeetingRetrospectiveServiceTest {
 			when(topicRepository.findByMeetingIdAndTopicStatusOrderByConfirmOrderAsc(meetingId, TopicStatus.CONFIRMED))
 					.thenReturn(List.of(topic));
 			when(topicRetrospectiveSummaryRepository.findAllByTopicIdIn(List.of(1L))).thenReturn(List.of(summary));
-			when(retrospectiveRepository.findAllByMeetingId(meetingId)).thenReturn(List.of());
 
 			MeetingRetrospectiveResponse response = meetingRetrospectiveService.getMeetingRetrospective(meetingId);
 
 			assertThat(response.topics()).hasSize(1);
-			assertThat(response.topics().get(0).summarizedOpinions()).containsExactly("요약1");
-			assertThat(response.topics().get(0).comments()).isEmpty();
+			assertThat(response.topics().get(0).summary()).isEqualTo("요약1");
+			assertThat(response.topics().get(0).keyPoints()).hasSize(1);
+			assertThat(response.topics().get(0).keyPoints().get(0).title()).isEqualTo("핵심 포인트");
 		}
 	}
 
@@ -239,6 +219,7 @@ class MeetingRetrospectiveServiceTest {
 			doNothing().when(retrospectiveValidator).validateMeetingRetrospectiveAccess(gatheringId, meetingId, userId);
 			when(topicValidator.getTopicInMeeting(topicId, meetingId)).thenReturn(topic);
 			when(retrospectiveRepository.save(any(MeetingRetrospective.class))).thenReturn(saved);
+			when(storageService.getPresignedProfileImage("https://image.jpg")).thenReturn("https://image.jpg");
 
 			// when
 			MeetingRetrospectiveResponse.CommentResponse response =
@@ -393,6 +374,46 @@ class MeetingRetrospectiveServiceTest {
 					.hasFieldOrPropertyWithValue("errorCode", GatheringErrorCode.NOT_GATHERING_LEADER);
 
 			verify(retrospectiveRepository, never()).delete(any());
+		}
+	}
+
+	@Test
+	@DisplayName("수집된 사전 의견 조회 - 첫 페이지")
+	void getCollectedAnswers_firstPage_success() {
+		Long meetingId = 1L;
+		Long userId = 1L;
+		int pageSize = 1;
+
+		User leader = User.builder().id(userId).nickname("리더").profileImageUrl("leader.jpg").build();
+		Meeting meeting = Meeting.builder().id(meetingId).meetingLeader(leader).build();
+		Topic topic = Topic.builder().id(10L).title("주제").build();
+		TopicAnswer answer = TopicAnswer.builder()
+				.id(100L)
+				.topic(topic)
+				.user(leader)
+				.content("답변")
+				.isSubmitted(true)
+				.build();
+
+		try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
+			securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
+
+			when(meetingValidator.findMeetingOrThrow(meetingId)).thenReturn(meeting);
+			when(topicAnswerRepository.findDistinctUserIdsByMeetingIdFirstPage(eq(meetingId), any(Pageable.class)))
+					.thenReturn(List.of(userId, 2L));
+			when(topicAnswerRepository.findSubmittedAnswersByMeetingIdAndUserIds(meetingId, List.of(userId)))
+					.thenReturn(List.of(answer));
+			when(topicAnswerRepository.countSubmittedAnswersByMeetingId(meetingId)).thenReturn(2);
+			when(storageService.getPresignedProfileImage("leader.jpg")).thenReturn("leader.jpg");
+
+			CursorResponse<MemberAnswerResponse, CollectedAnswersCursor> response =
+					meetingRetrospectiveService.getCollectedAnswers(meetingId, pageSize, null);
+
+			assertThat(response.items()).hasSize(1);
+			assertThat(response.items().get(0).userId()).isEqualTo(userId);
+			assertThat(response.hasNext()).isTrue();
+			assertThat(response.nextCursor().userId()).isEqualTo(userId);
+			assertThat(response.totalCount()).isEqualTo(2);
 		}
 	}
 }

@@ -12,7 +12,7 @@ public record PersonalReadingRecordCreateResponse(
         RecordType recordType,
         String recordContent,
         Map<String, Object> meta,
-        Long personalBookId
+        Long bookId
 ) {
 
     public static PersonalReadingRecordCreateResponse from(PersonalReadingRecord personalReadingRecordEntity) {
@@ -21,8 +21,7 @@ public record PersonalReadingRecordCreateResponse(
                 .recordType(personalReadingRecordEntity.getRecordType())
                 .recordContent(personalReadingRecordEntity.getRecordContent())
                 .meta(personalReadingRecordEntity.getMeta())
-                .personalBookId(personalReadingRecordEntity.getPersonalBook().getId())
+                .bookId(personalReadingRecordEntity.getPersonalBook().getBook().getId())
                 .build();
     }
 }
-

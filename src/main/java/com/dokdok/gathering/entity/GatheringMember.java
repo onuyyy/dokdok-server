@@ -61,12 +61,13 @@ import java.time.temporal.ChronoUnit;
     private LocalDateTime removedAt;
 
     public static GatheringMember of(Gathering gathering, User user,
-                                     GatheringRole role, GatheringMemberStatus status) {
+                                     GatheringRole role, GatheringMemberStatus status,  LocalDateTime joinedAt) {
         return GatheringMember.builder()
                 .gathering(gathering)
                 .user(user)
                 .role(role)
                 .memberStatus(status)
+                .joinedAt(joinedAt)
                 .build();
     }
 

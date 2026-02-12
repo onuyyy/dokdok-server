@@ -12,6 +12,7 @@ public record PersonalBookDetailResponse(
         String title,
         String publisher,
         String authors,
+        String thumbnail,
         BookReadingStatus bookReadingStatus
 ) {
     public static PersonalBookDetailResponse from(PersonalBook entity) {
@@ -21,6 +22,7 @@ public record PersonalBookDetailResponse(
                 .title(entity.getBook().getBookName())
                 .publisher(entity.getBook().getPublisher())
                 .authors(entity.getBook().getAuthor())
+                .thumbnail(entity.getBook().getThumbnail())
                 .bookReadingStatus(entity.getReadingStatus())
                 .build();
     }

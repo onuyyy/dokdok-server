@@ -34,7 +34,6 @@ public class RetrospectiveFreeText extends BaseTimeEntity {
     @Column(name = "content", columnDefinition = "TEXT")
     private String content;
 
-    @Builder
     public static RetrospectiveFreeText of(
             PersonalMeetingRetrospective personalMeetingRetrospective,
             String title,

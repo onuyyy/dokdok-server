@@ -7,6 +7,7 @@ import com.dokdok.user.dto.request.UpdateUserInfoRequest;
 import com.dokdok.user.dto.response.UserDetailResponse;
 import com.dokdok.user.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.MediaType;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -25,10 +26,10 @@ public class UserController implements UserApi {
     private final UserService userService;
 
     @Override
-    @PatchMapping("/onboarding")
+    @PatchMapping(value = "/onboarding", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponse<Void>> onboard(
-            OnboardRequest request,
-            MultipartFile profileImage) {
+            @Valid @RequestPart("request") OnboardRequest request,
+            @RequestPart(value = "profileImage", required = false) MultipartFile profileImage) {
         userService.onboard(request, profileImage);
         return ApiResponse.success("온보딩 완료");
     }
@@ -75,5 +76,20 @@ public class UserController implements UserApi {
         if (session != null) {
             session.invalidate();
         }
+    }
+
+    @Override
+    @PatchMapping(value = "/me/profile-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<UserDetailResponse>> updateProfileImage(
+            @RequestPart(value = "profileImage") MultipartFile profileImage) {
+        UserDetailResponse response = userService.updateProfileImage(profileImage);
+        return ApiResponse.success(response, "프로필 이미지가 변경되었습니다.");
+    }
+
+    @Override
+    @DeleteMapping("/me/profile-image")
+    public ResponseEntity<ApiResponse<Void>> deleteProfileImage() {
+        userService.deleteProfileImage();
+        return ApiResponse.success("프로필 이미지가 삭제되었습니다.");
     }
 }

@@ -1,7 +1,7 @@
 package com.dokdok.gathering.repository;
 
 import com.dokdok.gathering.entity.GatheringMember;
-import org.springframework.data.domain.Page;
+import com.dokdok.gathering.entity.GatheringMemberStatus;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
@@ -9,6 +9,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -24,18 +25,6 @@ public interface GatheringMemberRepository extends JpaRepository<GatheringMember
      * 특정 모임의 활성 멤버 수 조회
      */
     int countByGatheringIdAndRemovedAtIsNull(Long gatheringId);
-
-    /**
-     * 사용자의 활성 모임 목록 조회
-     */
-    @Query("SELECT gm FROM GatheringMember gm " +
-            "JOIN FETCH gm.gathering g " +
-            "WHERE gm.user.id = :userId " +
-            "AND  gm.removedAt IS NULL")
-    Page<GatheringMember> findActiveGatheringsByUserId(
-            @Param("userId") Long userId,
-            Pageable pageable
-    );
 
     /**
      * 특정 유저가 특정 모임의 멤버인지 확인 (Gathering fetch join)
@@ -68,4 +57,115 @@ public interface GatheringMemberRepository extends JpaRepository<GatheringMember
             "AND gm.memberStatus = 'ACTIVE' " +
             "AND gm.removedAt IS NULL")
     int countActiveMembersByStatus(@Param("gatheringId") Long gatheringId);
+
+    // 사용자의 즐겨찾기 모임 목록 조회
+    @Query("SELECT gm FROM GatheringMember gm " +
+            "JOIN FETCH gm.gathering g " +
+            "WHERE gm.user.id = :userId " +
+            "AND gm.isFavorite = true " +
+            "AND gm.memberStatus = 'ACTIVE' " +
+            "AND gm.removedAt IS NULL " +
+            "ORDER BY gm.joinedAt DESC")
+    List<GatheringMember> findFavoriteGatheringsByUserId(@Param("userId") Long userId);
+
+    // 사용자 즐겨찾기 개수 조회
+    @Query(value =
+            "SELECT COUNT(*) >= 4 FROM (" +
+                    "SELECT 1 FROM gathering_member " +
+                    "WHERE user_id = :userId " +
+                    "AND is_favorite = true " +
+                    "AND member_status = 'ACTIVE' " +
+                    "AND removed_at IS NULL " +
+                    "LIMIT 4" +
+                    ") sub", nativeQuery = true)
+    boolean isFavoriteLimitExceeded(@Param("userId") Long userId);
+
+    /**
+     * 커서 기반 내 모임 목록 조회 (첫 페이지)
+     */
+    @Query("SELECT gm FROM GatheringMember gm " +
+            "JOIN FETCH gm.gathering g " +
+            "WHERE gm.user.id = :userId " +
+            "AND gm.memberStatus = 'ACTIVE' " +
+            "AND g.gatheringStatus = 'ACTIVE' " +
+            "AND gm.removedAt IS NULL " +
+            "ORDER BY gm.joinedAt DESC, gm.id DESC")
+    List<GatheringMember> findMyGatheringsFirstPage(
+            @Param("userId") Long userId,
+            Pageable pageable
+    );
+
+    /**
+     * 커서 기반 내 모임 목록 조회 (다음 페이지)
+     */
+    @Query("SELECT gm FROM GatheringMember gm " +
+            "JOIN FETCH gm.gathering g " +
+            "WHERE gm.user.id = :userId " +
+            "AND gm.memberStatus = 'ACTIVE' " +
+            "AND g.gatheringStatus = 'ACTIVE' " +
+            "AND gm.removedAt IS NULL " +
+            "AND (gm.joinedAt < :cursorJoinedAt " +
+            "     OR (gm.joinedAt = :cursorJoinedAt AND gm.id < :cursorId)) " +
+            "ORDER BY gm.joinedAt DESC, gm.id DESC")
+    List<GatheringMember> findMyGatheringsAfterCursor(
+            @Param("userId") Long userId,
+            @Param("cursorJoinedAt") LocalDateTime cursorJoinedAt,
+            @Param("cursorId") Long cursorId,
+            Pageable pageable
+    );
+
+    /**
+     * 커서 기반 내 모임 목록 총 개수 조회 (첫 페이지용)
+     */
+    @Query("SELECT count(gm) FROM GatheringMember gm " +
+            "JOIN gm.gathering g " +
+            "WHERE gm.user.id = :userId " +
+            "AND gm.memberStatus = 'ACTIVE' " +
+            "AND g.gatheringStatus = 'ACTIVE' " +
+            "AND gm.removedAt IS NULL")
+    int countMyGatherings(@Param("userId") Long userId);
+
+    /**
+     * 모임 멤버 상태별 조회 (첫 페이지)
+     */
+    @Query("SELECT gm FROM GatheringMember gm " +
+            "JOIN FETCH gm.user u " +
+            "WHERE gm.gathering.id = :gatheringId " +
+            "AND gm.memberStatus = :status " +
+            "AND gm.removedAt IS NULL " +
+            "ORDER BY gm.id DESC")
+    List<GatheringMember> findMembersByStatusFirstPage(
+            @Param("gatheringId") Long gatheringId,
+            @Param("status") GatheringMemberStatus status,
+            Pageable pageable
+    );
+
+    /**
+     * 모임 멤버 상태별 조회 (다음 페이지)
+     */
+    @Query("SELECT gm FROM GatheringMember gm " +
+            "JOIN FETCH gm.user u " +
+            "WHERE gm.gathering.id = :gatheringId " +
+            "AND gm.memberStatus = :status " +
+            "AND gm.removedAt IS NULL " +
+            "AND gm.id < :cursorId " +
+            "ORDER BY gm.id DESC")
+    List<GatheringMember> findMembersByStatusAfterCursor(
+            @Param("gatheringId") Long gatheringId,
+            @Param("status") GatheringMemberStatus status,
+            @Param("cursorId") Long cursorId,
+            Pageable pageable
+    );
+
+    /**
+     * 모임 멤버 상태별 총 개수 조회
+     */
+    @Query("SELECT count(gm) FROM GatheringMember gm " +
+            "WHERE gm.gathering.id = :gatheringId " +
+            "AND gm.memberStatus = :status " +
+            "AND gm.removedAt IS NULL")
+    int countMembersByStatus(
+            @Param("gatheringId") Long gatheringId,
+            @Param("status") GatheringMemberStatus status
+    );
 }

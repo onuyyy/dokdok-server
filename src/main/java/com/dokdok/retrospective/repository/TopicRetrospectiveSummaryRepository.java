@@ -13,4 +13,5 @@ public interface TopicRetrospectiveSummaryRepository extends JpaRepository<Topic
 
     List<TopicRetrospectiveSummary> findAllByTopicIdIn(Collection<Long> topicIds);
 
+    Optional<TopicRetrospectiveSummary> findByTopicId(Long topicId);
 }

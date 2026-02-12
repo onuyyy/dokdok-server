@@ -47,8 +47,8 @@ public class Meeting extends BaseTimeEntity {
     @Column(name = "meeting_name", length = 24)
     private String meetingName;
 
-    @Column(name = "place", length = 255)
-    private String place;
+    @Embedded
+    private MeetingLocation location;
 
     @Column(name = "max_participants")
     private Integer maxParticipants;
@@ -76,7 +76,7 @@ public class Meeting extends BaseTimeEntity {
                 .book(book)
                 .meetingLeader(user)
                 .meetingName(meetingName)
-                .place(request.place())
+                .location(request.toLocationEntity())
                 .maxParticipants(maxParticipants)
                 .meetingStartDate(request.meetingStartDate())
                 .meetingEndDate(request.meetingEndDate())
@@ -129,8 +129,8 @@ public class Meeting extends BaseTimeEntity {
         if (request.endDate() != null) {
             this.meetingEndDate = request.endDate();
         }
-        if (request.place() != null) {
-            this.place = request.place();
+        if (request.location() != null) {
+            this.location = request.toLocationEntity();
         }
 
         if (request.maxParticipants() != null) {

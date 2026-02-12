@@ -16,6 +16,8 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import com.dokdok.storage.exception.StorageErrorCode;
 
 import java.util.stream.Collectors;
 
@@ -176,6 +178,22 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    // 파일 크기 초과 예외처리
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMaxUploadSizeExceededException(
+            MaxUploadSizeExceededException e
+    ) {
+        log.warn("Max Upload Size Exceeded - Message: {}", e.getMessage());
+
+        return ResponseEntity
+                .status(StorageErrorCode.FILE_SIZE_EXCEEDED.getStatus())
+                .body(new ApiResponse<>(
+                        StorageErrorCode.FILE_SIZE_EXCEEDED.getCode(),
+                        StorageErrorCode.FILE_SIZE_EXCEEDED.getMessage(),
+                        null
+                ));
+    }
+
     // Runtime Exception 예외처리
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<ApiResponse<Void>> runtimeExceptionHandler(RuntimeException e) {
@@ -184,7 +202,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(new ApiResponse<>(
-                        "E-000",
+                        "E000",
                         "서버 에러가 발생했습니다. 담당자에게 문의 바랍니다.",
                         null
                 ));

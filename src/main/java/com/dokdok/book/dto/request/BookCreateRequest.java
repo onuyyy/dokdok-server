@@ -21,4 +21,14 @@ public record BookCreateRequest(
                 .thumbnail(thumbnail)
                 .build();
     }
+
+    public static BookCreateRequest from(Book book) {
+        return BookCreateRequest.builder()
+                .title(book.getBookName())
+                .authors(book.getAuthor())
+                .publisher(book.getPublisher())
+                .isbn(book.getIsbn())
+                .thumbnail(book.getThumbnail())
+                .build();
+    }
 }

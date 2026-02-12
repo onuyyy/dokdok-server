@@ -1,5 +1,6 @@
 package com.dokdok.keyword.entity;
 
+import com.dokdok.book.entity.KeywordType;
 import com.dokdok.global.BaseTimeEntity;
 import jakarta.persistence.*;
 import lombok.*;
@@ -22,8 +23,9 @@ public class Keyword extends BaseTimeEntity {
     @Column(name = "keyword_id")
     private Long id;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "keyword_type", nullable = false, length = 30)
-    private String keywordType;
+    private KeywordType keywordType;
 
     @Column(name = "keyword_name", nullable = false, length = 50)
     private String keywordName;

@@ -66,7 +66,8 @@ class PersonalReadingRecordServiceTest {
     void createMemoRecord_Success() {
         // given
         Long userId = 1L;
-        Long personalBookId = 10L;
+        Long personalBookId = 100L;
+        Long bookId = 10L;
         PersonalReadingRecordCreateRequest request = new PersonalReadingRecordCreateRequest(
                 RecordType.MEMO,
                 "메모 내용",
@@ -80,7 +81,7 @@ class PersonalReadingRecordServiceTest {
                 .build();
 
         Book book = Book.builder()
-                .id(100L)
+                .id(bookId)
                 .isbn("9788994757254")
                 .bookName("테스트 책")
                 .author("저자")
@@ -96,7 +97,7 @@ class PersonalReadingRecordServiceTest {
 
         securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
         when(userValidator.findUserOrThrow(userId)).thenReturn(user);
-        when(bookValidator.validateInBookShelf(userId, personalBookId)).thenReturn(personalBook);
+        when(bookValidator.validatePersonalBook(userId, personalBookId)).thenReturn(personalBook);
 
         // when
         PersonalReadingRecordCreateResponse response = personalReadingRecordService.create(personalBookId, request);
@@ -105,7 +106,7 @@ class PersonalReadingRecordServiceTest {
         assertThat(response.recordType()).isEqualTo(RecordType.MEMO);
         assertThat(response.recordContent()).isEqualTo(request.recordContent());
         assertThat(response.meta()).isNull();
-        assertThat(response.personalBookId()).isEqualTo(personalBookId);
+        assertThat(response.bookId()).isEqualTo(bookId);
 
         ArgumentCaptor<com.dokdok.book.entity.PersonalReadingRecord> recordCaptor =
                 ArgumentCaptor.forClass(com.dokdok.book.entity.PersonalReadingRecord.class);
@@ -118,7 +119,7 @@ class PersonalReadingRecordServiceTest {
 
         securityUtilMock.verify(SecurityUtil::getCurrentUserId, times(1));
         verify(userValidator, times(1)).findUserOrThrow(userId);
-        verify(bookValidator, times(1)).validateInBookShelf(userId, personalBookId);
+        verify(bookValidator, times(1)).validatePersonalBook(userId, personalBookId);
     }
 
     @Test
@@ -126,7 +127,8 @@ class PersonalReadingRecordServiceTest {
     void createQuoteRecord_Success() {
         // given
         Long userId = 1L;
-        Long personalBookId = 20L;
+        Long personalBookId = 200L;
+        Long bookId = 20L;
         Map<String, Object> meta = new HashMap<>();
         meta.put("page", "12");
         meta.put("excerpt", "인용 내용");
@@ -144,7 +146,7 @@ class PersonalReadingRecordServiceTest {
                 .build();
 
         Book book = Book.builder()
-                .id(200L)
+                .id(bookId)
                 .isbn("9781234567890")
                 .bookName("다른 책")
                 .author("다른 저자")
@@ -160,7 +162,7 @@ class PersonalReadingRecordServiceTest {
 
         securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
         when(userValidator.findUserOrThrow(userId)).thenReturn(user);
-        when(bookValidator.validateInBookShelf(userId, personalBookId)).thenReturn(personalBook);
+        when(bookValidator.validatePersonalBook(userId, personalBookId)).thenReturn(personalBook);
 
         // when
         PersonalReadingRecordCreateResponse response = personalReadingRecordService.create(personalBookId, request);
@@ -169,9 +171,9 @@ class PersonalReadingRecordServiceTest {
         assertThat(response.recordType()).isEqualTo(RecordType.QUOTE);
         assertThat(response.recordContent()).isEqualTo(request.recordContent());
         assertThat(response.meta()).isNotNull();
-        assertThat(response.meta().get("page")).isEqualTo(12);
+        assertThat(response.meta().get("page")).isEqualTo("12");
         assertThat(response.meta().get("excerpt")).isEqualTo("인용 내용");
-        assertThat(response.personalBookId()).isEqualTo(personalBookId);
+        assertThat(response.bookId()).isEqualTo(bookId);
 
         ArgumentCaptor<com.dokdok.book.entity.PersonalReadingRecord> recordCaptor =
                 ArgumentCaptor.forClass(com.dokdok.book.entity.PersonalReadingRecord.class);
@@ -179,12 +181,12 @@ class PersonalReadingRecordServiceTest {
 
         com.dokdok.book.entity.PersonalReadingRecord savedRecord = recordCaptor.getValue();
         assertThat(savedRecord.getMeta()).isNotNull();
-        assertThat(savedRecord.getMeta().get("page")).isEqualTo(12);
+        assertThat(savedRecord.getMeta().get("page")).isEqualTo("12");
         assertThat(savedRecord.getMeta().get("excerpt")).isEqualTo("인용 내용");
 
         securityUtilMock.verify(SecurityUtil::getCurrentUserId, times(1));
         verify(userValidator, times(1)).findUserOrThrow(userId);
-        verify(bookValidator, times(1)).validateInBookShelf(userId, personalBookId);
+        verify(bookValidator, times(1)).validatePersonalBook(userId, personalBookId);
     }
 
     @Test
@@ -192,7 +194,8 @@ class PersonalReadingRecordServiceTest {
     void createQuoteRecord_MissingMeta() {
         // given
         Long userId = 1L;
-        Long personalBookId = 30L;
+        Long personalBookId = 300L;
+        Long bookId = 30L;
         PersonalReadingRecordCreateRequest request = new PersonalReadingRecordCreateRequest(
                 RecordType.QUOTE,
                 "인용 기록",
@@ -208,13 +211,13 @@ class PersonalReadingRecordServiceTest {
         PersonalBook personalBook = PersonalBook.builder()
                 .id(personalBookId)
                 .user(user)
-                .book(Book.builder().id(300L).isbn("9780000000000").bookName("책").author("저자").publisher("출판").build())
+                .book(Book.builder().id(bookId).isbn("9780000000000").bookName("책").author("저자").publisher("출판").build())
                 .readingStatus(BookReadingStatus.READING)
                 .build();
 
         securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
         when(userValidator.findUserOrThrow(userId)).thenReturn(user);
-        when(bookValidator.validateInBookShelf(userId, personalBookId)).thenReturn(personalBook);
+        when(bookValidator.validatePersonalBook(userId, personalBookId)).thenReturn(personalBook);
 
         // when & then
         assertThatThrownBy(() -> personalReadingRecordService.create(personalBookId, request))
@@ -224,7 +227,7 @@ class PersonalReadingRecordServiceTest {
         verify(personalReadingRecordRepository, never()).save(any());
         securityUtilMock.verify(SecurityUtil::getCurrentUserId, times(1));
         verify(userValidator, times(1)).findUserOrThrow(userId);
-        verify(bookValidator, times(1)).validateInBookShelf(userId, personalBookId);
+        verify(bookValidator, times(1)).validatePersonalBook(userId, personalBookId);
     }
 
     @Test
@@ -232,7 +235,8 @@ class PersonalReadingRecordServiceTest {
     void updateRecord_Success() {
         // given
         Long userId = 1L;
-        Long personalBookId = 40L;
+        Long personalBookId = 400L;
+        Long bookId = 40L;
         Long recordId = 5L;
 
         Map<String, Object> meta = new HashMap<>();
@@ -254,7 +258,7 @@ class PersonalReadingRecordServiceTest {
         PersonalBook personalBook = PersonalBook.builder()
                 .id(personalBookId)
                 .user(user)
-                .book(Book.builder().id(400L).isbn("9781111111111").bookName("책").author("저자").publisher("출판").build())
+                .book(Book.builder().id(bookId).isbn("9781111111111").bookName("책").author("저자").publisher("출판").build())
                 .readingStatus(BookReadingStatus.READING)
                 .build();
 
@@ -268,8 +272,8 @@ class PersonalReadingRecordServiceTest {
 
         securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
         when(userValidator.findUserOrThrow(userId)).thenReturn(user);
-        when(bookValidator.validateInBookShelf(userId, personalBookId)).thenReturn(personalBook);
-        when(personalReadingRecordRepository.findByIdAndPersonalBookIdAndUserId(recordId, personalBookId, userId))
+        when(bookValidator.validatePersonalBook(userId, personalBookId)).thenReturn(personalBook);
+        when(personalReadingRecordRepository.findByIdAndPersonalBook_IdAndUserId(recordId, personalBookId, userId))
                 .thenReturn(Optional.of(record));
 
         // when
@@ -280,19 +284,19 @@ class PersonalReadingRecordServiceTest {
         assertThat(response.recordContent()).isEqualTo(request.recordContent());
         assertThat(response.recordType()).isEqualTo(RecordType.QUOTE);
         assertThat(response.meta()).isNotNull();
-        assertThat(response.meta().get("page")).isEqualTo(30);
+        assertThat(response.meta().get("page")).isEqualTo("30");
         assertThat(response.meta().get("excerpt")).isEqualTo("수정된 인용문");
 
         assertThat(record.getRecordContent()).isEqualTo(request.recordContent());
         assertThat(record.getRecordType()).isEqualTo(RecordType.QUOTE);
-        assertThat(record.getMeta().get("page")).isEqualTo(30);
+        assertThat(record.getMeta().get("page")).isEqualTo("30");
 
         verify(personalReadingRecordRepository, times(1))
-                .findByIdAndPersonalBookIdAndUserId(recordId, personalBookId, userId);
+                .findByIdAndPersonalBook_IdAndUserId(recordId, personalBookId, userId);
         verify(personalReadingRecordRepository, never()).save(any());
         securityUtilMock.verify(SecurityUtil::getCurrentUserId, times(1));
         verify(userValidator, times(1)).findUserOrThrow(userId);
-        verify(bookValidator, times(1)).validateInBookShelf(userId, personalBookId);
+        verify(bookValidator, times(1)).validatePersonalBook(userId, personalBookId);
     }
 
     @Test
@@ -300,7 +304,8 @@ class PersonalReadingRecordServiceTest {
     void updateRecord_NotFound() {
         // given
         Long userId = 1L;
-        Long personalBookId = 50L;
+        Long personalBookId = 500L;
+        Long bookId = 50L;
         Long recordId = 999L;
 
         PersonalReadingRecordUpdateRequest request = new PersonalReadingRecordUpdateRequest(
@@ -318,14 +323,14 @@ class PersonalReadingRecordServiceTest {
         PersonalBook personalBook = PersonalBook.builder()
                 .id(personalBookId)
                 .user(user)
-                .book(Book.builder().id(500L).isbn("9782222222222").bookName("책").author("저자").publisher("출판").build())
+                .book(Book.builder().id(bookId).isbn("9782222222222").bookName("책").author("저자").publisher("출판").build())
                 .readingStatus(BookReadingStatus.READING)
                 .build();
 
         securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
         when(userValidator.findUserOrThrow(userId)).thenReturn(user);
-        when(bookValidator.validateInBookShelf(userId, personalBookId)).thenReturn(personalBook);
-        when(personalReadingRecordRepository.findByIdAndPersonalBookIdAndUserId(recordId, personalBookId, userId))
+        when(bookValidator.validatePersonalBook(userId, personalBookId)).thenReturn(personalBook);
+        when(personalReadingRecordRepository.findByIdAndPersonalBook_IdAndUserId(recordId, personalBookId, userId))
                 .thenReturn(Optional.empty());
 
         // when & then
@@ -334,11 +339,11 @@ class PersonalReadingRecordServiceTest {
                 .hasFieldOrPropertyWithValue("errorCode", RecordErrorCode.RECORD_NOT_FOUND);
 
         verify(personalReadingRecordRepository, times(1))
-                .findByIdAndPersonalBookIdAndUserId(recordId, personalBookId, userId);
+                .findByIdAndPersonalBook_IdAndUserId(recordId, personalBookId, userId);
         verify(personalReadingRecordRepository, never()).save(any());
         securityUtilMock.verify(SecurityUtil::getCurrentUserId, times(1));
         verify(userValidator, times(1)).findUserOrThrow(userId);
-        verify(bookValidator, times(1)).validateInBookShelf(userId, personalBookId);
+        verify(bookValidator, times(1)).validatePersonalBook(userId, personalBookId);
     }
 
     @Test
@@ -346,7 +351,8 @@ class PersonalReadingRecordServiceTest {
     void updateQuoteRecord_MissingMeta() {
         // given
         Long userId = 1L;
-        Long personalBookId = 60L;
+        Long personalBookId = 600L;
+        Long bookId = 60L;
         Long recordId = 7L;
 
         PersonalReadingRecordUpdateRequest request = new PersonalReadingRecordUpdateRequest(
@@ -364,7 +370,7 @@ class PersonalReadingRecordServiceTest {
         PersonalBook personalBook = PersonalBook.builder()
                 .id(personalBookId)
                 .user(user)
-                .book(Book.builder().id(600L).isbn("9783333333333").bookName("책").author("저자").publisher("출판").build())
+                .book(Book.builder().id(bookId).isbn("9783333333333").bookName("책").author("저자").publisher("출판").build())
                 .readingStatus(BookReadingStatus.READING)
                 .build();
 
@@ -378,8 +384,8 @@ class PersonalReadingRecordServiceTest {
 
         securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
         when(userValidator.findUserOrThrow(userId)).thenReturn(user);
-        when(bookValidator.validateInBookShelf(userId, personalBookId)).thenReturn(personalBook);
-        when(personalReadingRecordRepository.findByIdAndPersonalBookIdAndUserId(recordId, personalBookId, userId))
+        when(bookValidator.validatePersonalBook(userId, personalBookId)).thenReturn(personalBook);
+        when(personalReadingRecordRepository.findByIdAndPersonalBook_IdAndUserId(recordId, personalBookId, userId))
                 .thenReturn(Optional.of(record));
 
         // when & then
@@ -388,11 +394,11 @@ class PersonalReadingRecordServiceTest {
                 .hasFieldOrPropertyWithValue("errorCode", RecordErrorCode.INVALID_RECORD_REQUEST);
 
         verify(personalReadingRecordRepository, times(1))
-                .findByIdAndPersonalBookIdAndUserId(recordId, personalBookId, userId);
+                .findByIdAndPersonalBook_IdAndUserId(recordId, personalBookId, userId);
         verify(personalReadingRecordRepository, never()).save(any());
         securityUtilMock.verify(SecurityUtil::getCurrentUserId, times(1));
         verify(userValidator, times(1)).findUserOrThrow(userId);
-        verify(bookValidator, times(1)).validateInBookShelf(userId, personalBookId);
+        verify(bookValidator, times(1)).validatePersonalBook(userId, personalBookId);
     }
 
     @Test
@@ -400,7 +406,8 @@ class PersonalReadingRecordServiceTest {
     void deleteRecord_Success() {
         // given
         Long userId = 1L;
-        Long personalBookId = 70L;
+        Long personalBookId = 700L;
+        Long bookId = 70L;
         Long recordId = 8L;
 
         User user = User.builder()
@@ -412,7 +419,7 @@ class PersonalReadingRecordServiceTest {
         PersonalBook personalBook = PersonalBook.builder()
                 .id(personalBookId)
                 .user(user)
-                .book(Book.builder().id(700L).isbn("9784444444444").bookName("책").author("저자").publisher("출판").build())
+                .book(Book.builder().id(bookId).isbn("9784444444444").bookName("책").author("저자").publisher("출판").build())
                 .readingStatus(BookReadingStatus.READING)
                 .build();
 
@@ -426,8 +433,8 @@ class PersonalReadingRecordServiceTest {
 
         securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
         when(userValidator.findUserOrThrow(userId)).thenReturn(user);
-        when(bookValidator.validateInBookShelf(userId, personalBookId)).thenReturn(personalBook);
-        when(personalReadingRecordRepository.findByIdAndPersonalBookIdAndUserId(recordId, personalBookId, userId))
+        when(bookValidator.validatePersonalBook(userId, personalBookId)).thenReturn(personalBook);
+        when(personalReadingRecordRepository.findByIdAndPersonalBook_IdAndUserId(recordId, personalBookId, userId))
                 .thenReturn(Optional.of(record));
 
         // when
@@ -438,11 +445,11 @@ class PersonalReadingRecordServiceTest {
         assertThat(record.getDeletedAt()).isNotNull();
 
         verify(personalReadingRecordRepository, times(1))
-                .findByIdAndPersonalBookIdAndUserId(recordId, personalBookId, userId);
+                .findByIdAndPersonalBook_IdAndUserId(recordId, personalBookId, userId);
         verify(personalReadingRecordRepository, never()).save(any());
         securityUtilMock.verify(SecurityUtil::getCurrentUserId, times(1));
         verify(userValidator, times(1)).findUserOrThrow(userId);
-        verify(bookValidator, times(1)).validateInBookShelf(userId, personalBookId);
+        verify(bookValidator, times(1)).validatePersonalBook(userId, personalBookId);
     }
 
     @Test
@@ -450,7 +457,8 @@ class PersonalReadingRecordServiceTest {
     void deleteRecord_NotFound() {
         // given
         Long userId = 1L;
-        Long personalBookId = 80L;
+        Long personalBookId = 800L;
+        Long bookId = 80L;
         Long recordId = 99L;
 
         User user = User.builder()
@@ -462,14 +470,14 @@ class PersonalReadingRecordServiceTest {
         PersonalBook personalBook = PersonalBook.builder()
                 .id(personalBookId)
                 .user(user)
-                .book(Book.builder().id(800L).isbn("9785555555555").bookName("책").author("저자").publisher("출판").build())
+                .book(Book.builder().id(bookId).isbn("9785555555555").bookName("책").author("저자").publisher("출판").build())
                 .readingStatus(BookReadingStatus.READING)
                 .build();
 
         securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
         when(userValidator.findUserOrThrow(userId)).thenReturn(user);
-        when(bookValidator.validateInBookShelf(userId, personalBookId)).thenReturn(personalBook);
-        when(personalReadingRecordRepository.findByIdAndPersonalBookIdAndUserId(recordId, personalBookId, userId))
+        when(bookValidator.validatePersonalBook(userId, personalBookId)).thenReturn(personalBook);
+        when(personalReadingRecordRepository.findByIdAndPersonalBook_IdAndUserId(recordId, personalBookId, userId))
                 .thenReturn(Optional.empty());
 
         // when & then
@@ -478,10 +486,10 @@ class PersonalReadingRecordServiceTest {
                 .hasFieldOrPropertyWithValue("errorCode", RecordErrorCode.RECORD_NOT_FOUND);
 
         verify(personalReadingRecordRepository, times(1))
-                .findByIdAndPersonalBookIdAndUserId(recordId, personalBookId, userId);
+                .findByIdAndPersonalBook_IdAndUserId(recordId, personalBookId, userId);
         securityUtilMock.verify(SecurityUtil::getCurrentUserId, times(1));
         verify(userValidator, times(1)).findUserOrThrow(userId);
-        verify(bookValidator, times(1)).validateInBookShelf(userId, personalBookId);
+        verify(bookValidator, times(1)).validatePersonalBook(userId, personalBookId);
     }
 
     @Test
@@ -489,7 +497,8 @@ class PersonalReadingRecordServiceTest {
     void deleteRecord_AlreadyDeleted() {
         // given
         Long userId = 1L;
-        Long personalBookId = 90L;
+        Long personalBookId = 900L;
+        Long bookId = 90L;
         Long recordId = 77L;
 
         User user = User.builder()
@@ -501,7 +510,7 @@ class PersonalReadingRecordServiceTest {
         PersonalBook personalBook = PersonalBook.builder()
                 .id(personalBookId)
                 .user(user)
-                .book(Book.builder().id(900L).isbn("9786666666666").bookName("책").author("저자").publisher("출판").build())
+                .book(Book.builder().id(bookId).isbn("9786666666666").bookName("책").author("저자").publisher("출판").build())
                 .readingStatus(BookReadingStatus.READING)
                 .build();
 
@@ -517,8 +526,8 @@ class PersonalReadingRecordServiceTest {
 
         securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
         when(userValidator.findUserOrThrow(userId)).thenReturn(user);
-        when(bookValidator.validateInBookShelf(userId, personalBookId)).thenReturn(personalBook);
-        when(personalReadingRecordRepository.findByIdAndPersonalBookIdAndUserId(recordId, personalBookId, userId))
+        when(bookValidator.validatePersonalBook(userId, personalBookId)).thenReturn(personalBook);
+        when(personalReadingRecordRepository.findByIdAndPersonalBook_IdAndUserId(recordId, personalBookId, userId))
                 .thenReturn(Optional.of(record));
 
         // when & then
@@ -527,10 +536,10 @@ class PersonalReadingRecordServiceTest {
                 .hasFieldOrPropertyWithValue("errorCode", RecordErrorCode.RECORD_ALREADY_DELETED);
 
         verify(personalReadingRecordRepository, times(1))
-                .findByIdAndPersonalBookIdAndUserId(recordId, personalBookId, userId);
+                .findByIdAndPersonalBook_IdAndUserId(recordId, personalBookId, userId);
         securityUtilMock.verify(SecurityUtil::getCurrentUserId, times(1));
         verify(userValidator, times(1)).findUserOrThrow(userId);
-        verify(bookValidator, times(1)).validateInBookShelf(userId, personalBookId);
+        verify(bookValidator, times(1)).validatePersonalBook(userId, personalBookId);
     }
 
 }

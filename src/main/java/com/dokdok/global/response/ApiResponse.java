@@ -1,13 +1,18 @@
 package com.dokdok.global.response;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
+import io.swagger.v3.oas.annotations.media.Schema;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
-@JsonInclude(JsonInclude.Include.NON_NULL)
+@Schema(description = "공통 API 응답")
 public record ApiResponse<T>(
+        @Schema(description = "응답 코드", example = "SUCCESS")
         String code,
+
+        @Schema(description = "응답 메시지", example = "요청이 성공했습니다.")
         String message,
+
+        @Schema(description = "응답 데이터")
         T data
 ) {
 

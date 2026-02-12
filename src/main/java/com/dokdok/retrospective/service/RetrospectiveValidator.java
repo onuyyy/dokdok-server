@@ -1,6 +1,10 @@
 package com.dokdok.retrospective.service;
 
+import com.dokdok.gathering.entity.GatheringMember;
+import com.dokdok.gathering.entity.GatheringRole;
+import com.dokdok.gathering.repository.GatheringMemberRepository;
 import com.dokdok.gathering.service.GatheringValidator;
+import com.dokdok.meeting.repository.MeetingMemberRepository;
 import com.dokdok.meeting.service.MeetingValidator;
 import com.dokdok.retrospective.entity.MeetingRetrospective;
 import com.dokdok.retrospective.entity.PersonalMeetingRetrospective;
@@ -20,7 +24,8 @@ public class RetrospectiveValidator {
     private final PersonalRetrospectiveRepository personalRetrospectiveRepository;
     private final GatheringValidator gatheringValidator;
     private final MeetingValidator meetingValidator;
-    private final RetrospectiveRepository retrospectiveRepository;
+    private final MeetingMemberRepository meetingMemberRepository;
+    private final GatheringMemberRepository gatheringMemberRepository;
 
     public void validateRetrospective(Long meetingId, Long userId) {
         boolean exists = personalRetrospectiveRepository.existsByMeetingIdAndUserId(meetingId, userId);
@@ -30,10 +35,30 @@ public class RetrospectiveValidator {
         }
     }
 
-    public void validateMeetingRetrospectiveAccess(Long gatheringId, Long meetingId, Long userId) {
-        gatheringValidator.validateMembership(gatheringId, userId);
+    public void validateRetrospectiveByUser(Long retrospectiveId, Long userId) {
+        boolean exists = personalRetrospectiveRepository.existsByIdAndUserId(retrospectiveId, userId);
 
+        if (exists) {
+            throw new RetrospectiveException(RetrospectiveErrorCode.NOT_AUTHOR_OF_RETROSPECTIVE);
+        }
+    }
+
+    public void validateMeetingRetrospectiveAccess(Long gatheringId, Long meetingId, Long userId) {
         meetingValidator.validateMeetingInGathering(meetingId, gatheringId);
+
+        // 약속 참여자인지 확인
+        boolean isMeetingMember = meetingMemberRepository.existsByMeetingIdAndUserId(meetingId, userId);
+        if (isMeetingMember) {
+            return;
+        }
+
+        // 모임장인지 확인
+        GatheringMember member = gatheringMemberRepository.findByGatheringIdAndUserId(gatheringId, userId)
+                .orElseThrow(() -> new RetrospectiveException(RetrospectiveErrorCode.NO_ACCESS_RETROSPECTIVE));
+
+        if (member.getRole() != GatheringRole.LEADER) {
+            throw new RetrospectiveException(RetrospectiveErrorCode.NO_ACCESS_RETROSPECTIVE);
+        }
     }
 
     public void validateRetrospective(Long retrospectiveId) {
@@ -71,5 +96,23 @@ public class RetrospectiveValidator {
         }
 
         return retrospectives;
+    }
+
+    public void validateSummaryUpdatePermission(Long gatheringId, Long meetingId, Long userId) {
+        meetingValidator.validateMeetingInGathering(meetingId, gatheringId);
+
+        // 약속장인지 확인
+        boolean isMeetingLeader = meetingValidator.isMeetingLeader(meetingId, userId);
+        if (isMeetingLeader) {
+            return;
+        }
+
+        // 모임장인지 확인
+        GatheringMember member = gatheringMemberRepository.findByGatheringIdAndUserId(gatheringId, userId)
+                .orElseThrow(() -> new RetrospectiveException(RetrospectiveErrorCode.NO_ACCESS_RETROSPECTIVE));
+
+        if (member.getRole() != GatheringRole.LEADER) {
+            throw new RetrospectiveException(RetrospectiveErrorCode.NO_ACCESS_RETROSPECTIVE);
+        }
     }
 }

@@ -5,15 +5,20 @@ import com.dokdok.gathering.dto.request.GatheringCreateRequest;
 import com.dokdok.gathering.dto.request.JoinGatheringMemberRequest;
 import com.dokdok.gathering.dto.response.*;
 import com.dokdok.gathering.dto.request.GatheringUpdateRequest;
+import com.dokdok.gathering.entity.GatheringMemberStatus;
 import com.dokdok.gathering.service.GatheringService;
 import com.dokdok.global.response.ApiResponse;
+import com.dokdok.global.response.CursorResponse;
+import com.dokdok.global.response.PageResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Pageable;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDateTime;
 
 @RestController
 @RequestMapping("/api/gatherings")
@@ -62,11 +67,11 @@ public class GatheringController implements GatheringApi {
     }
 
     @Override
-    @GetMapping
-    public ResponseEntity<ApiResponse<MyGatheringListResponse>> getMyGatherings(Pageable pageable) {
-        MyGatheringListResponse response = gatheringService.getMyGatherings(pageable);
+    @GetMapping("/favorites")
+    public ResponseEntity<ApiResponse<FavoriteGatheringListResponse>> getFavoriteGatherings() {
+        FavoriteGatheringListResponse response = gatheringService.getFavoriteGatherings();
 
-        return ApiResponse.success(response, "나의 모임 리스트 조회 성공");
+        return ApiResponse.success(response, "즐겨찾기 모임 리스트 조회 성공");
     }
 
     @Override
@@ -104,9 +109,43 @@ public class GatheringController implements GatheringApi {
     }
 
     @Override
-    @PatchMapping("/{gatheringId}/favorite")
+    @PatchMapping("/{gatheringId}/favorites")
     public ResponseEntity<ApiResponse<Void>> updateFavorite(@PathVariable Long gatheringId){
         gatheringService.updateFavorite(gatheringId);
         return ApiResponse.success("모임의 즐겨찾기 상태변경 성공");
+    }
+
+    @Override
+    @GetMapping
+    public ResponseEntity<ApiResponse<CursorResponse<GatheringListItemResponse, MyGatheringCursor>>> getMyGatherings(
+            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime cursorJoinedAt,
+            @RequestParam(required = false) Long cursorId
+    ) {
+        CursorResponse<GatheringListItemResponse, MyGatheringCursor> response = gatheringService.getMyGatherings(pageSize, cursorJoinedAt, cursorId);
+        return ApiResponse.success(response, "내 모임 전체 목록 조회 성공");
+    }
+
+    @Override
+    @GetMapping("/{gatheringId}/books")
+    public ResponseEntity<ApiResponse<PageResponse<GatheringBookListResponse>>> getGatheringBooks(
+            @PathVariable Long gatheringId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        PageResponse<GatheringBookListResponse> response = gatheringService.getGatheringBooks(gatheringId, page, size);
+        return ApiResponse.success(response, "모임 책장 조회를 성공했습니다.");
+    }
+
+    @Override
+    @GetMapping("/{gatheringId}/members")
+    public ResponseEntity<ApiResponse<CursorResponse<GatheringMemberResponse, GatheringMemberCursor>>> getGatheringMembers(
+            @PathVariable Long gatheringId,
+            @RequestParam GatheringMemberStatus status,
+            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(required = false) Long cursorId
+    ){
+        CursorResponse<GatheringMemberResponse, GatheringMemberCursor> response = gatheringService.getGatheringMembers(gatheringId, status, pageSize, cursorId);
+        return ApiResponse.success(response,"모임 멤버 관리 조회 성공");
     }
 }

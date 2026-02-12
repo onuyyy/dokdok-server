@@ -33,7 +33,7 @@ public class Book {
     @Column(name = "author", length = 200)
     private String author;
 
-    @Column(name = "book_image_url", length = 500)
+    @Column(name = "thumbnail", length = 500)
     private String thumbnail;
 
     @NotBlank(message = "isbn은 필수 항목입니다.")

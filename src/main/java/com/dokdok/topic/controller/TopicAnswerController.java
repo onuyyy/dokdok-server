@@ -2,88 +2,73 @@ package com.dokdok.topic.controller;
 
 import com.dokdok.global.response.ApiResponse;
 import com.dokdok.topic.api.TopicAnswerApi;
-import com.dokdok.topic.dto.request.TopicAnswerRequest;
+import com.dokdok.topic.dto.request.TopicAnswerBulkSaveRequest;
+import com.dokdok.topic.dto.request.TopicAnswerBulkSubmitRequest;
+import com.dokdok.topic.dto.response.PreOpinionSaveResponse;
+import com.dokdok.topic.dto.response.PreOpinionSubmitResponse;
 import com.dokdok.topic.dto.response.TopicAnswerDetailResponse;
-import com.dokdok.topic.dto.response.TopicAnswerResponse;
-import com.dokdok.topic.dto.response.TopicAnswerSubmitResponse;
 import com.dokdok.topic.service.TopicAnswerService;
 import lombok.RequiredArgsConstructor;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/gatherings/{gathering_id}/meetings/{meeting_id}/topics/{topic_id}/answers")
+@RequestMapping("/api/gatherings/{gatheringId}/meetings/{meetingId}/answers")
 public class TopicAnswerController implements TopicAnswerApi {
 
     private final TopicAnswerService topicAnswerService;
 
     @Override
-    public ResponseEntity<ApiResponse<TopicAnswerResponse>> createAnswer(
+    public ResponseEntity<ApiResponse<PreOpinionSaveResponse>> createAnswer(
             Long gatheringId,
             Long meetingId,
-            Long topicId,
-            TopicAnswerRequest request
+            @Valid @RequestBody TopicAnswerBulkSaveRequest request
     ) {
-        TopicAnswerResponse response = topicAnswerService.createAnswer(
-                gatheringId, meetingId, topicId, request
+        PreOpinionSaveResponse response = topicAnswerService.createAnswer(
+                gatheringId, meetingId, request
         );
 
-        return ApiResponse.created(response, "답변이 저장되었습니다.");
+        return ApiResponse.created(response, "사전 의견이 저장되었습니다.");
     }
 
     @Override
     public ResponseEntity<ApiResponse<TopicAnswerDetailResponse>> findMyAnswer(
             Long gatheringId,
-            Long meetingId,
-            Long topicId
+            Long meetingId
     ) {
         TopicAnswerDetailResponse response = topicAnswerService.getMyAnswer(
-                gatheringId, meetingId, topicId
+                gatheringId, meetingId
         );
 
-        return ApiResponse.success(response, "조회 성공");
+        return ApiResponse.success(response, "사전 의견 작성 화면 조회를 성공했습니다.");
     }
 
     @Override
-    public ResponseEntity<ApiResponse<TopicAnswerResponse>> updateMyAnswer(
+    public ResponseEntity<ApiResponse<PreOpinionSaveResponse>> updateMyAnswer(
             Long gatheringId,
             Long meetingId,
-            Long topicId,
-            TopicAnswerRequest request
+            @Valid @RequestBody TopicAnswerBulkSaveRequest request
     ) {
-        TopicAnswerResponse response = topicAnswerService.updateMyAnswer(
-                gatheringId, meetingId, topicId, request
+        PreOpinionSaveResponse response = topicAnswerService.updateMyAnswer(
+                gatheringId, meetingId, request
         );
 
-        return ApiResponse.updated(response, "답변이 수정되었습니다.");
+        return ApiResponse.updated(response, "사전 의견이 저장되었습니다.");
     }
 
     @Override
-    public ResponseEntity<ApiResponse<TopicAnswerSubmitResponse>> submitMyAnswer(
+    public ResponseEntity<ApiResponse<PreOpinionSubmitResponse>> submitMyAnswer(
             Long gatheringId,
             Long meetingId,
-            Long topicId
+            @Valid @RequestBody TopicAnswerBulkSubmitRequest request
     ) {
-        TopicAnswerSubmitResponse response = topicAnswerService.submitMyAnswer(
-                gatheringId, meetingId, topicId
+        PreOpinionSubmitResponse response = topicAnswerService.submitMyAnswer(
+                gatheringId, meetingId, request
         );
 
-        return ApiResponse.success(response, "답변이 제출되었습니다.");
-    }
-
-    @Override
-    public ResponseEntity<ApiResponse<Void>> deleteMyAnswer(
-            @PathVariable("gathering_id") Long gatheringId,
-            @PathVariable("meeting_id") Long meetingId,
-            @PathVariable("topic_id") Long topicId
-    ) {
-
-        topicAnswerService.deleteMyAnswer(gatheringId, meetingId, topicId);
-
-        return ApiResponse.deleted("내 답변이 삭제되었습니다.");
+        return ApiResponse.success(response, "사전 의견이 제출되었습니다.");
     }
 }

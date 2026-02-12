@@ -35,7 +35,23 @@ public class TopicRetrospectiveSummary extends BaseTimeEntity {
     @JoinColumn(name = "topic_id")
     private Topic topic;
 
+    @Column(name = "summary", columnDefinition = "TEXT")
+    private String summary;
+
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "summarized_opinions", columnDefinition = "jsonb")
-    private List<String> summarizedOpinions;
+    @Column(name = "key_points", columnDefinition = "jsonb")
+    private List<KeyPoint> keyPoints;
+
+    public void update(String summary, List<KeyPoint> keyPoints) {
+        this.summary = summary;
+        this.keyPoints = keyPoints;
+    }
+
+    @Getter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class KeyPoint {
+        private String title;
+        private List<String> details;
+    }
 }

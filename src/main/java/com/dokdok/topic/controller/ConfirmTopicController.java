@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
 @RequiredArgsConstructor
@@ -19,9 +20,14 @@ public class ConfirmTopicController implements ConfirmTopicApi {
     @Override
     public ResponseEntity<ApiResponse<ConfirmedTopicsResponse>> getConfirmedTopics(
             Long gatheringId,
-            Long meetingId
+            Long meetingId,
+            @RequestParam(defaultValue = "10") Integer pageSize,
+            @RequestParam(required = false) Integer cursorConfirmOrder,
+            @RequestParam(required = false) Long cursorTopicId
     ) {
-        ConfirmedTopicsResponse response = topicService.getConfirmedTopics(gatheringId, meetingId);
+        ConfirmedTopicsResponse response = topicService.getConfirmedTopics(
+                gatheringId, meetingId, pageSize, cursorConfirmOrder, cursorTopicId
+        );
         return ApiResponse.success(response, "확정된 주제 조회를 완료했습니다.");
     }
 }

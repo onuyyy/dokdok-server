@@ -4,6 +4,7 @@ import com.dokdok.global.response.ApiResponse;
 import com.dokdok.retrospective.api.PersonalRetrospectiveApi;
 import com.dokdok.retrospective.dto.request.PersonalRetrospectiveRequest;
 import com.dokdok.retrospective.dto.response.PersonalRetrospectiveDetailResponse;
+import com.dokdok.retrospective.dto.response.PersonalRetrospectiveEditResponse;
 import com.dokdok.retrospective.dto.response.PersonalRetrospectiveFormResponse;
 import com.dokdok.retrospective.dto.response.PersonalRetrospectiveResponse;
 import com.dokdok.retrospective.service.PersonalRetrospectiveService;
@@ -32,27 +33,27 @@ public class PersonalRetrospectiveController implements PersonalRetrospectiveApi
     }
 
     @Override
-    @GetMapping
+    @GetMapping("/form")
     public ResponseEntity<ApiResponse<PersonalRetrospectiveFormResponse>> getPersonalRetrospectiveForm(
             @PathVariable Long meetingId
     ) {
         PersonalRetrospectiveFormResponse response
                 = personalRetrospectiveService.getPersonalRetrospectiveForm(meetingId);
 
-        return ApiResponse.success(response, "개인 회고 입력 폼 조회 성공했습니다.");
+        return ApiResponse.success(response, "개인 회고 입력 폼 조회를 성공했습니다.");
     }
 
 
     @Override
-    @GetMapping("/{retrospectiveId}")
-    public ResponseEntity<ApiResponse<PersonalRetrospectiveDetailResponse>> getPersonalRetrospectiveEditForm(
+    @GetMapping("/{retrospectiveId}/form")
+    public ResponseEntity<ApiResponse<PersonalRetrospectiveEditResponse>> getPersonalRetrospectiveEditForm(
             @PathVariable Long meetingId,
             @PathVariable Long retrospectiveId
     ) {
-        PersonalRetrospectiveDetailResponse response
+        PersonalRetrospectiveEditResponse response
                 = personalRetrospectiveService.getPersonalRetrospectiveEditForm(meetingId, retrospectiveId);
 
-        return ApiResponse.success(response, "개인 회고 조회를 성공했습니다.");
+        return ApiResponse.success(response, "개인 회고 수정 폼 조회를 성공했습니다.");
     }
 
     @Override
@@ -78,5 +79,17 @@ public class PersonalRetrospectiveController implements PersonalRetrospectiveApi
         personalRetrospectiveService.deletePersonalRetrospective(meetingId, retrospectiveId);
 
         return ApiResponse.deleted("개인 회고 삭제를 성공했습니다.");
+    }
+
+    @Override
+    @GetMapping("/{retrospectiveId}")
+    public ResponseEntity<ApiResponse<PersonalRetrospectiveDetailResponse>> getPersonalRetrospective(
+            @PathVariable Long meetingId,
+            @PathVariable Long retrospectiveId
+    ) {
+        PersonalRetrospectiveDetailResponse response
+                = personalRetrospectiveService.getPersonalRetrospective(meetingId, retrospectiveId);
+
+        return ApiResponse.success(response, "개인 회고 조회를 성공했습니다.");
     }
 }

@@ -80,6 +80,11 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
             request.getSession().removeAttribute("fe_origin");
         }
 
+        // 프로토콜이 없으면 http:// 추가
+        if (feOrigin != null && !feOrigin.startsWith("http://") && !feOrigin.startsWith("https://")) {
+            feOrigin = "http://" + feOrigin;
+        }
+
         // 화이트리스트 검증
         if (feOrigin != null
                 && frontendProperties.getAllowedOrigins() != null

@@ -83,6 +83,24 @@ public class StorageService {
         }
     }
 
+    public void deleteProfileImage(String objectPath) {
+        if (objectPath == null || objectPath.isBlank()) {
+            return;
+        }
+
+        try {
+            internalMinioClient.removeObject(
+                    RemoveObjectArgs.builder()
+                            .bucket(bucket)
+                            .object(objectPath)
+                            .build()
+            );
+        } catch (Exception e) {
+            log.error("파일 삭제 실패: {}", e.getMessage(), e);
+            throw new StorageException(StorageErrorCode.FILE_DELETE_FAILED, e);
+        }
+    }
+
 	private void validateImageFile(MultipartFile file) {
 		if (file.isEmpty()) {
 			throw new StorageException(StorageErrorCode.INVALID_FILE_TYPE);

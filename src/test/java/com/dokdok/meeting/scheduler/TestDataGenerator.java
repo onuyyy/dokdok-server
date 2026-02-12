@@ -6,6 +6,7 @@ import com.dokdok.gathering.entity.Gathering;
 import com.dokdok.gathering.entity.GatheringStatus;
 import com.dokdok.gathering.repository.GatheringRepository;
 import com.dokdok.meeting.entity.Meeting;
+import com.dokdok.meeting.entity.MeetingLocation;
 import com.dokdok.meeting.entity.MeetingStatus;
 import com.dokdok.meeting.repository.MeetingRepository;
 import com.dokdok.user.entity.User;
@@ -61,7 +62,12 @@ public class TestDataGenerator {
                     .book(testBook)
                     .meetingLeader(testUser)
                     .meetingName("성능테스트 모임 " + i)
-                    .place("테스트 장소 " + i)
+                    .location(MeetingLocation.builder()
+                            .name("테스트 장소 " + i)
+                            .address("테스트 주소 " + i)
+                            .latitude(37.0)
+                            .longitude(127.0)
+                            .build())
                     .maxParticipants(10)
                     .meetingStatus(MeetingStatus.CONFIRMED)
                     // 종료 시간을 과거로 설정 (1시간 ~ 24시간 전)

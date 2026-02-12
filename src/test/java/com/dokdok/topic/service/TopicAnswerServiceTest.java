@@ -1,17 +1,26 @@
 package com.dokdok.topic.service;
 
+import com.dokdok.book.dto.request.BookReviewRequest;
+import com.dokdok.book.dto.response.BookReviewResponse;
+import com.dokdok.book.repository.BookReviewRepository;
+import com.dokdok.book.service.BookReviewService;
 import com.dokdok.gathering.service.GatheringValidator;
+import com.dokdok.meeting.entity.Meeting;
 import com.dokdok.meeting.service.MeetingValidator;
-import com.dokdok.topic.dto.request.TopicAnswerRequest;
-import com.dokdok.topic.dto.response.TopicAnswerResponse;
+import com.dokdok.topic.dto.request.TopicAnswerBulkSaveRequest;
+import com.dokdok.topic.dto.request.TopicAnswerBulkSubmitRequest;
+import com.dokdok.topic.dto.response.PreOpinionSaveResponse;
+import com.dokdok.topic.dto.response.PreOpinionSubmitResponse;
 import com.dokdok.topic.entity.Topic;
 import com.dokdok.topic.entity.TopicAnswer;
 import com.dokdok.topic.exception.TopicException;
-import com.dokdok.topic.exception.TopicErrorCode;
 import com.dokdok.topic.repository.TopicAnswerRepository;
 import com.dokdok.topic.repository.TopicRepository;
 import com.dokdok.user.entity.User;
 import com.dokdok.global.exception.GlobalException;
+import java.util.List;
+import java.math.BigDecimal;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,9 +36,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -49,7 +57,10 @@ class TopicAnswerServiceTest {
     private MeetingValidator meetingValidator;
 
     @Mock
-    private TopicValidator topicValidator;
+    private BookReviewRepository bookReviewRepository;
+
+    @Mock
+    private BookReviewService bookReviewService;
 
     @InjectMocks
     private TopicAnswerService topicAnswerService;
@@ -79,7 +90,7 @@ class TopicAnswerServiceTest {
     }
 
     @Test
-    @DisplayName("토픽 답변 생성 시 저장 요청과 응답 DTO를 확인한다")
+    @DisplayName("토픽 답변 일괄 저장 시 저장 요청과 응답 DTO를 확인한다")
     void createAnswer_savesAnswerAndReturnsResponse() {
         Topic topic = Topic.builder().id(12L).build();
         TopicAnswer saved = TopicAnswer.builder()
@@ -89,15 +100,27 @@ class TopicAnswerServiceTest {
                 .isSubmitted(false)
                 .build();
 
-        given(topicRepository.getReferenceById(12L)).willReturn(topic);
-        doNothing().when(topicValidator).validateTopicInMeeting(12L, 1L);
+        given(topicRepository.findAllByIdInAndMeetingId(List.of(12L), 1L))
+                .willReturn(List.of(topic));
+        given(topicAnswerRepository.findByMeetingIdUserId(1L, 1L))
+                .willReturn(List.of());
         given(topicAnswerRepository.save(any(TopicAnswer.class)))
                 .willReturn(saved);
+        given(meetingValidator.findMeetingOrThrow(1L))
+                .willReturn(Meeting.builder().book(com.dokdok.book.entity.Book.builder().id(10L).build()).build());
+        given(bookReviewRepository.findByBookIdAndUserId(10L, 1L))
+                .willReturn(Optional.empty());
+        BookReviewResponse reviewResponse = new BookReviewResponse(1L, 10L, 1L, BigDecimal.valueOf(4.5), List.of());
+        given(bookReviewService.createReview(eq(10L), any(BookReviewRequest.class)))
+                .willReturn(reviewResponse);
 
-        TopicAnswerRequest request = new TopicAnswerRequest("이 책을 읽고 ...");
+        TopicAnswerBulkSaveRequest request = new TopicAnswerBulkSaveRequest(
+                new BookReviewRequest(BigDecimal.valueOf(4.5), List.of(1L)),
+                List.of(new TopicAnswerBulkSaveRequest.AnswerItem(12L, "이 책을 읽고 ..."))
+        );
 
-        TopicAnswerResponse response = topicAnswerService.createAnswer(
-                1L, 1L, 12L, request
+        PreOpinionSaveResponse response = topicAnswerService.createAnswer(
+                1L, 1L, request
         );
 
         ArgumentCaptor<TopicAnswer> captor = ArgumentCaptor.forClass(TopicAnswer.class);
@@ -108,20 +131,24 @@ class TopicAnswerServiceTest {
         assertThat(captured.getUser().getId()).isEqualTo(1L);
         assertThat(captured.getContent()).isEqualTo("이 책을 읽고 ...");
 
-        assertThat(response.topicId()).isEqualTo(12L);
-        assertThat(response.isSubmitted()).isFalse();
+        assertThat(response.review().reviewId()).isEqualTo(1L);
+        assertThat(response.answers()).hasSize(1);
+        assertThat(response.answers().get(0).topicId()).isEqualTo(12L);
+        assertThat(response.answers().get(0).isSubmitted()).isFalse();
     }
 
     @Test
     @DisplayName("토픽이 없으면 예외가 발생한다")
     void createAnswer_throwsWhenTopicMissing() {
-        doThrow(new TopicException(TopicErrorCode.TOPIC_NOT_FOUND))
-                .when(topicValidator).validateTopicInMeeting(12L, 1L);
-
-        TopicAnswerRequest request = new TopicAnswerRequest("이 책을 읽고 ...");
+        given(topicRepository.findAllByIdInAndMeetingId(List.of(12L), 1L))
+                .willReturn(List.of());
+        TopicAnswerBulkSaveRequest request = new TopicAnswerBulkSaveRequest(
+                new BookReviewRequest(BigDecimal.valueOf(4.5), List.of(1L)),
+                List.of(new TopicAnswerBulkSaveRequest.AnswerItem(12L, "이 책을 읽고 ..."))
+        );
 
         assertThatThrownBy(() -> topicAnswerService.createAnswer(
-                1L, 1L, 12L, request
+                1L, 1L, request
         )).isInstanceOf(TopicException.class);
 
         verifyNoInteractions(topicAnswerRepository);
@@ -131,15 +158,18 @@ class TopicAnswerServiceTest {
     @DisplayName("인증 정보가 없으면 예외가 발생한다")
     void createAnswer_throwsWhenUnauthenticated() {
         SecurityContextHolder.clearContext();
-        TopicAnswerRequest request = new TopicAnswerRequest("이 책을 읽고 ...");
+        TopicAnswerBulkSaveRequest request = new TopicAnswerBulkSaveRequest(
+                new BookReviewRequest(BigDecimal.valueOf(4.5), List.of(1L)),
+                List.of(new TopicAnswerBulkSaveRequest.AnswerItem(12L, "이 책을 읽고 ..."))
+        );
 
         assertThatThrownBy(() -> topicAnswerService.createAnswer(
-                1L, 1L, 12L, request
+                1L, 1L, request
         )).isInstanceOf(GlobalException.class);
     }
 
     @Test
-    @DisplayName("내 토픽 답변 수정 시 내용이 갱신되고 응답 DTO를 반환한다")
+    @DisplayName("토픽 답변 일괄 저장 시 기존 답변이 갱신된다")
     void updateMyAnswer_updatesContentAndReturnsResponse() {
         Topic topic = Topic.builder().id(12L).build();
         User user = User.builder().id(1L).build();
@@ -151,18 +181,30 @@ class TopicAnswerServiceTest {
                 .isSubmitted(false)
                 .build();
 
-        given(topicValidator.getTopicAnswer(12L, 1L)).willReturn(answer);
-        doNothing().when(topicValidator).validateTopicInMeeting(12L, 1L);
+        given(topicRepository.findAllByIdInAndMeetingId(List.of(12L), 1L))
+                .willReturn(List.of(topic));
+        given(topicAnswerRepository.findByMeetingIdUserId(1L, 1L))
+                .willReturn(List.of(answer));
+        given(meetingValidator.findMeetingOrThrow(1L))
+                .willReturn(Meeting.builder().book(com.dokdok.book.entity.Book.builder().id(10L).build()).build());
+        given(bookReviewRepository.findByBookIdAndUserId(10L, 1L))
+                .willReturn(Optional.empty());
+        given(bookReviewService.createReview(eq(10L), any(BookReviewRequest.class)))
+                .willReturn(new BookReviewResponse(1L, 10L, 1L, BigDecimal.valueOf(4.5), List.of()));
 
-        TopicAnswerRequest request = new TopicAnswerRequest("수정된 내용");
+        TopicAnswerBulkSaveRequest request = new TopicAnswerBulkSaveRequest(
+                new BookReviewRequest(BigDecimal.valueOf(4.5), List.of(1L)),
+                List.of(new TopicAnswerBulkSaveRequest.AnswerItem(12L, "수정된 내용"))
+        );
 
-        TopicAnswerResponse response = topicAnswerService.updateMyAnswer(
-                1L, 1L, 12L, request
+        PreOpinionSaveResponse response = topicAnswerService.updateMyAnswer(
+                1L, 1L, request
         );
 
         assertThat(answer.getContent()).isEqualTo("수정된 내용");
-        assertThat(response.topicId()).isEqualTo(12L);
-        assertThat(response.isSubmitted()).isFalse();
+        assertThat(response.answers()).hasSize(1);
+        assertThat(response.answers().get(0).topicId()).isEqualTo(12L);
+        assertThat(response.answers().get(0).isSubmitted()).isFalse();
     }
 
     @Test
@@ -178,32 +220,29 @@ class TopicAnswerServiceTest {
                 .isSubmitted(true)
                 .build();
 
-        given(topicValidator.getTopicAnswer(12L, 1L)).willReturn(answer);
-        doNothing().when(topicValidator).validateTopicInMeeting(12L, 1L);
+        given(topicRepository.findAllByIdInAndMeetingId(List.of(12L), 1L))
+                .willReturn(List.of(topic));
+        given(topicAnswerRepository.findByMeetingIdUserId(1L, 1L))
+                .willReturn(List.of(answer));
+        given(meetingValidator.findMeetingOrThrow(1L))
+                .willReturn(Meeting.builder().book(com.dokdok.book.entity.Book.builder().id(10L).build()).build());
+        given(bookReviewRepository.findByBookIdAndUserId(10L, 1L))
+                .willReturn(Optional.empty());
+        given(bookReviewService.createReview(eq(10L), any(BookReviewRequest.class)))
+                .willReturn(new BookReviewResponse(1L, 10L, 1L, BigDecimal.valueOf(4.5), List.of()));
 
-        TopicAnswerRequest request = new TopicAnswerRequest("수정된 내용");
+        TopicAnswerBulkSaveRequest request = new TopicAnswerBulkSaveRequest(
+                new BookReviewRequest(BigDecimal.valueOf(4.5), List.of(1L)),
+                List.of(new TopicAnswerBulkSaveRequest.AnswerItem(12L, "수정된 내용"))
+        );
 
         assertThatThrownBy(() -> topicAnswerService.updateMyAnswer(
-                1L, 1L, 12L, request
+                1L, 1L, request
         )).isInstanceOf(TopicException.class);
     }
 
     @Test
-    @DisplayName("내 토픽 답변이 없으면 수정 시 예외가 발생한다")
-    void updateMyAnswer_throwsWhenAnswerMissing() {
-        given(topicValidator.getTopicAnswer(12L, 1L))
-                .willThrow(new TopicException(TopicErrorCode.TOPIC_ANSWER_NOT_FOUND));
-        doNothing().when(topicValidator).validateTopicInMeeting(12L, 1L);
-
-        TopicAnswerRequest request = new TopicAnswerRequest("수정된 내용");
-
-        assertThatThrownBy(() -> topicAnswerService.updateMyAnswer(
-                1L, 1L, 12L, request
-        )).isInstanceOf(TopicException.class);
-    }
-
-    @Test
-    @DisplayName("내 토픽 답변 제출 시 제출 상태로 변경된다")
+    @DisplayName("토픽 답변 일괄 제출 시 제출 상태로 변경된다")
     void submitMyAnswer_updatesSubmittedState() {
         Topic topic = Topic.builder().id(12L).build();
         User user = User.builder().id(1L).build();
@@ -215,15 +254,28 @@ class TopicAnswerServiceTest {
                 .isSubmitted(false)
                 .build();
 
-        given(topicValidator.getTopicAnswer(12L, 1L)).willReturn(answer);
-        doNothing().when(topicValidator).validateTopicInMeeting(12L, 1L);
+        given(topicRepository.findAllByIdInAndMeetingId(List.of(12L), 1L))
+                .willReturn(List.of(topic));
+        given(topicAnswerRepository.findByMeetingIdUserId(1L, 1L))
+                .willReturn(List.of(answer));
+        given(meetingValidator.findMeetingOrThrow(1L))
+                .willReturn(Meeting.builder().book(com.dokdok.book.entity.Book.builder().id(10L).build()).build());
+        given(bookReviewRepository.findByBookIdAndUserId(10L, 1L))
+                .willReturn(Optional.empty());
+        given(bookReviewService.createReview(eq(10L), any(BookReviewRequest.class)))
+                .willReturn(new BookReviewResponse(1L, 10L, 1L, BigDecimal.valueOf(4.5), List.of()));
 
-        com.dokdok.topic.dto.response.TopicAnswerSubmitResponse response =
-                topicAnswerService.submitMyAnswer(1L, 1L, 12L);
+        TopicAnswerBulkSubmitRequest request = new TopicAnswerBulkSubmitRequest(
+                new BookReviewRequest(BigDecimal.valueOf(4.5), List.of(1L)),
+                List.of(12L)
+        );
+        PreOpinionSubmitResponse response =
+                topicAnswerService.submitMyAnswer(1L, 1L, request);
 
         assertThat(answer.getIsSubmitted()).isTrue();
-        assertThat(response.topicId()).isEqualTo(12L);
-        assertThat(response.isSubmitted()).isTrue();
+        assertThat(response.answers()).hasSize(1);
+        assertThat(response.answers().get(0).topicId()).isEqualTo(12L);
+        assertThat(response.answers().get(0).isSubmitted()).isTrue();
     }
 
     @Test
@@ -239,141 +291,18 @@ class TopicAnswerServiceTest {
                 .isSubmitted(true)
                 .build();
 
-        given(topicValidator.getTopicAnswer(12L, 1L)).willReturn(answer);
-        doNothing().when(topicValidator).validateTopicInMeeting(12L, 1L);
+        given(topicRepository.findAllByIdInAndMeetingId(List.of(12L), 1L))
+                .willReturn(List.of(topic));
+        given(topicAnswerRepository.findByMeetingIdUserId(1L, 1L))
+                .willReturn(List.of(answer));
 
+        TopicAnswerBulkSubmitRequest request = new TopicAnswerBulkSubmitRequest(
+                new BookReviewRequest(BigDecimal.valueOf(4.5), List.of(1L)),
+                List.of(12L)
+        );
         assertThatThrownBy(() -> topicAnswerService.submitMyAnswer(
-                1L, 1L, 12L
+                1L, 1L, request
         )).isInstanceOf(TopicException.class);
     }
 
-    @Test
-    @DisplayName("내 토픽 답변 삭제 시 softDelete가 호출된다")
-    void deleteMyAnswer_callsSoftDelete() {
-        Topic topic = Topic.builder().id(12L).build();
-        User user = User.builder().id(1L).build();
-        TopicAnswer answer = TopicAnswer.builder()
-                .id(100L)
-                .topic(topic)
-                .user(user)
-                .content("삭제할 내용")
-                .isSubmitted(false)
-                .build();
-
-        doNothing().when(gatheringValidator).validateGathering(1L);
-        doNothing().when(meetingValidator).validateMeetingInGathering(1L, 1L);
-        doNothing().when(meetingValidator).validateMeetingMember(1L, 1L);
-        doNothing().when(topicValidator).validateTopicInMeeting(12L, 1L);
-        given(topicValidator.getTopicAnswer(12L, 1L)).willReturn(answer);
-
-        topicAnswerService.deleteMyAnswer(1L, 1L, 12L);
-
-        assertThat(answer.isDeleted()).isTrue();
-    }
-
-    @Test
-    @DisplayName("모임 검증 실패 시 답변 삭제가 실패한다")
-    void deleteMyAnswer_throwsWhenGatheringValidationFails() {
-        doThrow(new com.dokdok.gathering.exception.GatheringException(
-                com.dokdok.gathering.exception.GatheringErrorCode.GATHERING_NOT_FOUND))
-                .when(gatheringValidator).validateGathering(1L);
-
-        assertThatThrownBy(() -> topicAnswerService.deleteMyAnswer(1L, 1L, 12L))
-                .isInstanceOf(com.dokdok.gathering.exception.GatheringException.class);
-
-        verifyNoInteractions(topicAnswerRepository);
-    }
-
-    @Test
-    @DisplayName("미팅 검증 실패 시 답변 삭제가 실패한다")
-    void deleteMyAnswer_throwsWhenMeetingValidationFails() {
-        doNothing().when(gatheringValidator).validateGathering(1L);
-        doThrow(new com.dokdok.meeting.exception.MeetingException(
-                com.dokdok.meeting.exception.MeetingErrorCode.MEETING_NOT_FOUND))
-                .when(meetingValidator).validateMeetingInGathering(1L, 1L);
-
-        assertThatThrownBy(() -> topicAnswerService.deleteMyAnswer(1L, 1L, 12L))
-                .isInstanceOf(com.dokdok.meeting.exception.MeetingException.class);
-
-        verifyNoInteractions(topicAnswerRepository);
-    }
-
-    @Test
-    @DisplayName("미팅 멤버 검증 실패 시 답변 삭제가 실패한다")
-    void deleteMyAnswer_throwsWhenMeetingMemberValidationFails() {
-        doNothing().when(gatheringValidator).validateGathering(1L);
-        doNothing().when(meetingValidator).validateMeetingInGathering(1L, 1L);
-        doThrow(new com.dokdok.meeting.exception.MeetingException(
-                com.dokdok.meeting.exception.MeetingErrorCode.MEETING_MEMBER_NOT_FOUND))
-                .when(meetingValidator).validateMeetingMember(1L, 1L);
-
-        assertThatThrownBy(() -> topicAnswerService.deleteMyAnswer(1L, 1L, 12L))
-                .isInstanceOf(com.dokdok.meeting.exception.MeetingException.class);
-
-        verifyNoInteractions(topicAnswerRepository);
-    }
-
-    @Test
-    @DisplayName("토픽 검증 실패 시 답변 삭제가 실패한다")
-    void deleteMyAnswer_throwsWhenTopicValidationFails() {
-        doNothing().when(gatheringValidator).validateGathering(1L);
-        doNothing().when(meetingValidator).validateMeetingInGathering(1L, 1L);
-        doNothing().when(meetingValidator).validateMeetingMember(1L, 1L);
-        doThrow(new TopicException(TopicErrorCode.TOPIC_NOT_FOUND))
-                .when(topicValidator).validateTopicInMeeting(12L, 1L);
-
-        assertThatThrownBy(() -> topicAnswerService.deleteMyAnswer(1L, 1L, 12L))
-                .isInstanceOf(TopicException.class);
-
-        verifyNoInteractions(topicAnswerRepository);
-    }
-
-    @Test
-    @DisplayName("답변이 없으면 삭제 시 예외가 발생한다")
-    void deleteMyAnswer_throwsWhenAnswerNotFound() {
-        doNothing().when(gatheringValidator).validateGathering(1L);
-        doNothing().when(meetingValidator).validateMeetingInGathering(1L, 1L);
-        doNothing().when(meetingValidator).validateMeetingMember(1L, 1L);
-        doNothing().when(topicValidator).validateTopicInMeeting(12L, 1L);
-        given(topicValidator.getTopicAnswer(12L, 1L))
-                .willThrow(new TopicException(TopicErrorCode.TOPIC_ANSWER_NOT_FOUND));
-
-        assertThatThrownBy(() -> topicAnswerService.deleteMyAnswer(1L, 1L, 12L))
-                .isInstanceOf(TopicException.class);
-    }
-
-    @Test
-    @DisplayName("이미 삭제된 답변은 다시 삭제할 수 없다")
-    void deleteMyAnswer_throwsWhenAlreadyDeleted() {
-        Topic topic = Topic.builder().id(12L).build();
-        User user = User.builder().id(1L).build();
-        TopicAnswer answer = TopicAnswer.builder()
-                .id(100L)
-                .topic(topic)
-                .user(user)
-                .content("삭제된 내용")
-                .isSubmitted(false)
-                .build();
-        // 이미 삭제된 상태로 설정
-        answer.softDelete();
-
-        doNothing().when(gatheringValidator).validateGathering(1L);
-        doNothing().when(meetingValidator).validateMeetingInGathering(1L, 1L);
-        doNothing().when(meetingValidator).validateMeetingMember(1L, 1L);
-        doNothing().when(topicValidator).validateTopicInMeeting(12L, 1L);
-        given(topicValidator.getTopicAnswer(12L, 1L)).willReturn(answer);
-
-        assertThatThrownBy(() -> topicAnswerService.deleteMyAnswer(1L, 1L, 12L))
-                .isInstanceOf(TopicException.class)
-                .hasFieldOrPropertyWithValue("errorCode", TopicErrorCode.TOPIC_ANSWER_ALREADY_DELETED);
-    }
-
-    @Test
-    @DisplayName("인증 정보가 없으면 삭제 시 예외가 발생한다")
-    void deleteMyAnswer_throwsWhenUnauthenticated() {
-        SecurityContextHolder.clearContext();
-
-        assertThatThrownBy(() -> topicAnswerService.deleteMyAnswer(1L, 1L, 12L))
-                .isInstanceOf(GlobalException.class);
-    }
 }

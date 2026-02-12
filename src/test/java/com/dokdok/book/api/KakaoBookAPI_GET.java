@@ -34,7 +34,7 @@ class KakaoBookAPI_GET {
 
         String baseUrl = resolveBaseUrl();
         KakaoBookClient kakaoBookClient = new KakaoBookClient(createWebClient(baseUrl, apiKey));
-        KakaoBookResponse response = kakaoBookClient.searchBooks("harry potter");
+        KakaoBookResponse response = kakaoBookClient.searchBooks("harry potter", 1, 10);
 
         assertThat(response).isNotNull();
         assertThat(response.documents()).isNotNull();

@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Component
 @RequiredArgsConstructor
@@ -42,17 +43,27 @@ public class BookValidator {
         }
     }
 
-    public PersonalBook validateInBookShelf(Long userId, Long personalBookId) {
-        return personalBookRepository.findByUserIdAndId(userId, personalBookId)
+    public PersonalBook validateInBookShelf(Long userId, Long bookId) {
+        return personalBookRepository.findTopByUserIdAndBookIdAndGatheringIsNullOrderByAddedAtDesc(userId, bookId)
+                .orElseThrow(() -> new BookException(BookErrorCode.BOOK_NOT_IN_SHELF));
+    }
+
+    // 책장에 해당 책이 존재 여부 확인하는 메서드입니다.
+    public PersonalBook validatePersonalBook(Long userId, Long personalBookId) {
+        return personalBookRepository.findByIdAndUserId(personalBookId, userId)
                 .orElseThrow(() -> new BookException(BookErrorCode.BOOK_NOT_IN_SHELF));
     }
 
     public void validateDuplicatePersonalBook(Long userId, Long bookId) {
-        personalBookRepository.findByUserIdAndBookId(userId, bookId)
+        personalBookRepository.findTopByUserIdAndBookIdAndGatheringIsNullOrderByAddedAtDesc(userId, bookId)
                 .ifPresent(personalBook ->
                 {
                     throw new BookException(BookErrorCode.BOOK_ALREADY_EXISTS);
                 });
+    }
+
+    public boolean isDuplicatePersonalBook(Long userId, Long bookId) {
+        return personalBookRepository.findTopByUserIdAndBookIdAndGatheringIsNullOrderByAddedAtDesc(userId, bookId).isPresent();
     }
 
     // 삭제되지 않은 책 리뷰 존재 여부를 검증하고 반환합니다.
@@ -82,4 +93,5 @@ public class BookValidator {
             throw new BookException(BookErrorCode.BOOK_REVIEW_INVALID_RATING);
         }
     }
+
 }

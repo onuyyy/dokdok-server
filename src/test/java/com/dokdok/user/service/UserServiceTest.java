@@ -877,4 +877,202 @@ class UserServiceTest {
             securityUtilMock.verify(() -> SecurityUtil.updateCurrentUserInContext(user), times(1));
         }
     }
+
+    @Test
+    @DisplayName("프로필 이미지 변경 - 기존 이미지 없이 새 이미지 업로드 성공")
+    void updateProfileImage_WithoutExistingImage_Success() {
+        // given
+        Long userId = 1L;
+        String newImageUrl = "profiles/1/new-uuid.jpg";
+        String presignedUrl = "https://minio.example.com/presigned/new-uuid.jpg";
+
+        User user = User.builder()
+                .id(userId)
+                .nickname("테스트닉네임")
+                .profileImageUrl(null)
+                .build();
+
+        MultipartFile mockFile = mock(MultipartFile.class);
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(storageService.uploadProfileImage(mockFile)).thenReturn(newImageUrl);
+        when(storageService.getPresignedProfileImage(newImageUrl)).thenReturn(presignedUrl);
+
+        try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
+            securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
+
+            // when
+            var response = userService.updateProfileImage(mockFile);
+
+            // then
+            assertThat(response).isNotNull();
+            assertThat(response.profileImageUrl()).isEqualTo(presignedUrl);
+            assertThat(user.getProfileImageUrl()).isEqualTo(newImageUrl);
+
+            verify(storageService, never()).deleteProfileImage(anyString());
+            verify(storageService, times(1)).uploadProfileImage(mockFile);
+            verify(storageService, times(1)).getPresignedProfileImage(newImageUrl);
+            securityUtilMock.verify(() -> SecurityUtil.updateCurrentUserInContext(user), times(1));
+        }
+    }
+
+    @Test
+    @DisplayName("프로필 이미지 변경 - 기존 이미지 삭제 후 새 이미지 업로드 성공")
+    void updateProfileImage_WithExistingImage_DeletesOldAndUploadsNew() {
+        // given
+        Long userId = 1L;
+        String oldImageUrl = "profiles/1/old-uuid.jpg";
+        String newImageUrl = "profiles/1/new-uuid.jpg";
+        String presignedUrl = "https://minio.example.com/presigned/new-uuid.jpg";
+
+        User user = User.builder()
+                .id(userId)
+                .nickname("테스트닉네임")
+                .profileImageUrl(oldImageUrl)
+                .build();
+
+        MultipartFile mockFile = mock(MultipartFile.class);
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(storageService.uploadProfileImage(mockFile)).thenReturn(newImageUrl);
+        when(storageService.getPresignedProfileImage(newImageUrl)).thenReturn(presignedUrl);
+
+        try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
+            securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
+
+            // when
+            var response = userService.updateProfileImage(mockFile);
+
+            // then
+            assertThat(response).isNotNull();
+            assertThat(response.profileImageUrl()).isEqualTo(presignedUrl);
+            assertThat(user.getProfileImageUrl()).isEqualTo(newImageUrl);
+
+            verify(storageService, times(1)).deleteProfileImage(oldImageUrl);
+            verify(storageService, times(1)).uploadProfileImage(mockFile);
+            verify(storageService, times(1)).getPresignedProfileImage(newImageUrl);
+            securityUtilMock.verify(() -> SecurityUtil.updateCurrentUserInContext(user), times(1));
+        }
+    }
+
+    @Test
+    @DisplayName("프로필 이미지 변경 - 존재하지 않는 사용자 예외")
+    void updateProfileImage_UserNotFound_ThrowsException() {
+        // given
+        Long userId = 1L;
+        MultipartFile mockFile = mock(MultipartFile.class);
+
+        when(userRepository.findById(userId)).thenReturn(Optional.empty());
+
+        try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
+            securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
+
+            // when & then
+            assertThatThrownBy(() -> userService.updateProfileImage(mockFile))
+                    .isInstanceOf(UserException.class)
+                    .hasFieldOrPropertyWithValue("errorCode", UserErrorCode.USER_NOT_FOUND);
+
+            verify(storageService, never()).deleteProfileImage(anyString());
+            verify(storageService, never()).uploadProfileImage(any());
+        }
+    }
+
+    @Test
+    @DisplayName("프로필 이미지 삭제 - 기존 이미지 삭제 성공")
+    void deleteProfileImage_WithExistingImage_Success() {
+        // given
+        Long userId = 1L;
+        String existingImageUrl = "profiles/1/uuid.jpg";
+
+        User user = User.builder()
+                .id(userId)
+                .nickname("테스트닉네임")
+                .profileImageUrl(existingImageUrl)
+                .build();
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
+            securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
+
+            // when
+            userService.deleteProfileImage();
+
+            // then
+            assertThat(user.getProfileImageUrl()).isNull();
+            verify(storageService, times(1)).deleteProfileImage(existingImageUrl);
+            securityUtilMock.verify(() -> SecurityUtil.updateCurrentUserInContext(user), times(1));
+        }
+    }
+
+    @Test
+    @DisplayName("프로필 이미지 삭제 - 기존 이미지 없으면 삭제 스킵")
+    void deleteProfileImage_WithoutExistingImage_SkipsDelete() {
+        // given
+        Long userId = 1L;
+
+        User user = User.builder()
+                .id(userId)
+                .nickname("테스트닉네임")
+                .profileImageUrl(null)
+                .build();
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
+            securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
+
+            // when
+            userService.deleteProfileImage();
+
+            // then
+            assertThat(user.getProfileImageUrl()).isNull();
+            verify(storageService, never()).deleteProfileImage(anyString());
+        }
+    }
+
+    @Test
+    @DisplayName("프로필 이미지 삭제 - 빈 문자열 이미지 URL이면 삭제 스킵")
+    void deleteProfileImage_WithBlankImageUrl_SkipsDelete() {
+        // given
+        Long userId = 1L;
+
+        User user = User.builder()
+                .id(userId)
+                .nickname("테스트닉네임")
+                .profileImageUrl("   ")
+                .build();
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
+            securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
+
+            // when
+            userService.deleteProfileImage();
+
+            // then
+            verify(storageService, never()).deleteProfileImage(anyString());
+        }
+    }
+
+    @Test
+    @DisplayName("프로필 이미지 삭제 - 존재하지 않는 사용자 예외")
+    void deleteProfileImage_UserNotFound_ThrowsException() {
+        // given
+        Long userId = 1L;
+
+        when(userRepository.findById(userId)).thenReturn(Optional.empty());
+
+        try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
+            securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
+
+            // when & then
+            assertThatThrownBy(() -> userService.deleteProfileImage())
+                    .isInstanceOf(UserException.class)
+                    .hasFieldOrPropertyWithValue("errorCode", UserErrorCode.USER_NOT_FOUND);
+
+            verify(storageService, never()).deleteProfileImage(anyString());
+        }
+    }
 }
