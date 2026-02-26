@@ -1,10 +1,12 @@
 package com.dokdok.retrospective.dto.response;
 
+import com.dokdok.meeting.entity.Meeting;
 import com.dokdok.retrospective.entity.TopicRetrospectiveSummary;
 import com.dokdok.topic.entity.Topic;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Schema(description = "AI 요약 조회 응답")
@@ -13,12 +15,20 @@ public record RetrospectiveSummaryResponse(
         @Schema(description = "약속 ID", example = "1")
         Long meetingId,
 
+        @Schema(description = "약속 회고 생성 여부", example = "false")
+        Boolean isPublished,
+
+        @Schema(description = "약속 회고 생성 일시", example = "2026-02-21T15:00:00")
+        LocalDateTime publishedAt,
+
         @Schema(description = "토픽 목록")
         List<TopicSummaryResponse> topics
 ) {
-    public static RetrospectiveSummaryResponse from(Long meetingId, List<TopicSummaryResponse> topics) {
+    public static RetrospectiveSummaryResponse from(Meeting meeting, List<TopicSummaryResponse> topics) {
         return RetrospectiveSummaryResponse.builder()
-                .meetingId(meetingId)
+                .meetingId(meeting.getId())
+                .isPublished(meeting.isRetrospectivePublished())
+                .publishedAt(meeting.getRetrospectivePublishedAt())
                 .topics(topics)
                 .build();
     }

@@ -89,6 +89,8 @@ public interface MeetingApi {
                                             }
                                           ]
                                         },
+                                        "retrospectiveStatus": "AI_SUMMARY_COMPLETED",
+                                        "personalRetrospectiveWritten": true,
                                         "actionState": {
                                           "type": "CAN_EDIT",
                                           "buttonLabel": "수정하기",

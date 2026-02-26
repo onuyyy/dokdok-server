@@ -1,7 +1,10 @@
 package com.dokdok.book.controller;
 
 import com.dokdok.book.api.BookApi;
+import com.dokdok.book.dto.request.BookBulkDeleteRequest;
 import com.dokdok.book.dto.request.BookCreateRequest;
+import com.dokdok.book.dto.request.PersonalBookSortBy;
+import com.dokdok.book.dto.request.PersonalBookSortOrder;
 import com.dokdok.book.dto.response.*;
 import com.dokdok.book.entity.BookReadingStatus;
 import com.dokdok.book.service.BookService;
@@ -15,6 +18,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 @RestController
@@ -44,17 +48,33 @@ public class BookController implements BookApi {
 
     @Override
     @GetMapping
-    public ResponseEntity<ApiResponse<CursorPageResponse<PersonalBookListResponse, BookListCursor>>> getMyBooks(
+    public ResponseEntity<ApiResponse<PersonalBookCursorPageResponse>> getMyBooks(
             BookReadingStatus readingStatus,
             Long gatheringId,
+            PersonalBookSortBy sortBy,
+            PersonalBookSortOrder sortOrder,
+            @RequestParam(required = false) BigDecimal minRating,
+            @RequestParam(required = false) BigDecimal maxRating,
+            @RequestParam(required = false) BigDecimal cursorRating,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
             OffsetDateTime cursorAddedAt,
             @RequestParam(required = false) Long cursorBookId,
             @RequestParam(required = false) Integer size
     ) {
-        CursorPageResponse<PersonalBookListResponse, BookListCursor> response = personalBookService
-                .getPersonalBookListCursor(readingStatus, gatheringId, cursorAddedAt, cursorBookId, size);
+        PersonalBookCursorPageResponse response = personalBookService
+                .getPersonalBookListCursor(
+                        readingStatus,
+                        gatheringId,
+                        sortBy,
+                        sortOrder,
+                        minRating,
+                        maxRating,
+                        cursorRating,
+                        cursorAddedAt,
+                        cursorBookId,
+                        size
+                );
         return ApiResponse.success(response, "책 리스트 조회 성공");
     }
 
@@ -70,6 +90,13 @@ public class BookController implements BookApi {
     public ResponseEntity<ApiResponse<Void>> deleteMyBook(@PathVariable Long bookId) {
         personalBookService.deleteBook(bookId);
         return ApiResponse.deleted("책 삭제 성공");
+    }
+
+    @Override
+    @DeleteMapping
+    public ResponseEntity<ApiResponse<Void>> deleteMyBooks(@Valid @RequestBody BookBulkDeleteRequest request) {
+        personalBookService.deleteBooks(request.bookIds());
+        return ApiResponse.deleted("책 일괄 삭제 성공");
     }
 
 

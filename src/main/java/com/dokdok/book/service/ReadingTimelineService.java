@@ -2,6 +2,7 @@ package com.dokdok.book.service;
 
 import com.dokdok.book.dto.request.PreOpinionTimeType;
 import com.dokdok.book.dto.response.*;
+import com.dokdok.book.entity.ReflectionRecordType;
 import com.dokdok.book.entity.PersonalBook;
 import com.dokdok.book.entity.PersonalReadingRecord;
 import com.dokdok.book.repository.PersonalReadingRecordRepository;
@@ -108,6 +109,10 @@ public class ReadingTimelineService {
                 .filter(row -> ReadingTimelineType.PERSONAL_RETROSPECTIVE.name().equals(row.type()))
                 .map(ReadingTimelineIndexRow::sourceId)
                 .toList();
+        List<Long> groupRetrospectiveMeetingIds = pageRows.stream()
+                .filter(row -> ReadingTimelineType.GROUP_RETROSPECTIVE.name().equals(row.type()))
+                .map(ReadingTimelineIndexRow::sourceId)
+                .toList();
         List<Long> meetingIds = pageRows.stream()
                 .filter(row -> ReadingTimelineType.PRE_OPINION.name().equals(row.type()))
                 .map(ReadingTimelineIndexRow::sourceId)
@@ -117,7 +122,9 @@ public class ReadingTimelineService {
                 fetchReadingRecords(readingRecordIds, personalBookId, userId);
         Map<Long, RetrospectiveRecordResponse> retrospectiveMap =
                 fetchRetrospectives(retrospectiveIds, userId);
-        Map<Long, PersonalReadingTopicAnswerResponse> preOpinionMap =
+        Map<Long, RetrospectiveRecordResponse> groupRetrospectiveMap =
+                fetchGroupRetrospectives(groupRetrospectiveMeetingIds);
+        Map<Long, ReadingTimelinePreOpinionResponse> preOpinionMap =
                 fetchPreOpinions(meetingIds, userId);
 
         List<ReadingTimelineItem> items = pageRows.stream()
@@ -133,6 +140,11 @@ public class ReadingTimelineService {
                                 row.eventAt(),
                                 row.sourceId(),
                                 retrospectiveMap.get(row.sourceId())
+                        );
+                        case GROUP_RETROSPECTIVE -> ReadingTimelineItem.groupRetrospective(
+                                row.eventAt(),
+                                row.sourceId(),
+                                groupRetrospectiveMap.get(row.sourceId())
                         );
                         case PRE_OPINION -> ReadingTimelineItem.preOpinion(
                                 row.eventAt(),
@@ -223,7 +235,36 @@ public class ReadingTimelineService {
         return map;
     }
 
-    private Map<Long, PersonalReadingTopicAnswerResponse> fetchPreOpinions(
+    private Map<Long, RetrospectiveRecordResponse> fetchGroupRetrospectives(List<Long> meetingIds) {
+        if (meetingIds.isEmpty()) {
+            return Map.of();
+        }
+
+        List<Meeting> meetings = meetingRepository.findByIdInWithGathering(meetingIds);
+        Map<Long, RetrospectiveRecordResponse> map = new HashMap<>();
+
+        for (Meeting meeting : meetings) {
+            if (!meeting.isRetrospectivePublished() || meeting.getRetrospectivePublishedAt() == null) {
+                continue;
+            }
+
+            map.put(
+                    meeting.getId(),
+                    RetrospectiveRecordResponse.of(
+                            meeting.getId(),
+                            meeting.getGathering().getGatheringName(),
+                            ReflectionRecordType.MEETING_RETROSPECTIVE,
+                            meeting.getRetrospectivePublishedAt(),
+                            List.of(),
+                            List.of()
+                    )
+            );
+        }
+
+        return map;
+    }
+
+    private Map<Long, ReadingTimelinePreOpinionResponse> fetchPreOpinions(
             List<Long> meetingIds,
             Long userId
     ) {
@@ -250,7 +291,7 @@ public class ReadingTimelineService {
                     .put(answer.getTopic().getId(), answer);
         }
 
-        Map<Long, PersonalReadingTopicAnswerResponse> map = new HashMap<>();
+        Map<Long, ReadingTimelinePreOpinionResponse> map = new HashMap<>();
         for (Long meetingId : meetingIds) {
             Meeting meeting = meetingMap.get(meetingId);
             if (meeting == null) {
@@ -264,8 +305,8 @@ public class ReadingTimelineService {
                     .toList();
 
             Map<Long, TopicAnswer> answerMap = answersByMeeting.getOrDefault(meetingId, Map.of());
-            List<PersonalReadingTopicAnswerResponse.TopicAnswerInfo> items = meetingTopics.stream()
-                    .map(topic -> new PersonalReadingTopicAnswerResponse.TopicAnswerInfo(
+            List<ReadingTimelinePreOpinionResponse.TopicAnswerInfo> items = meetingTopics.stream()
+                    .map(topic -> new ReadingTimelinePreOpinionResponse.TopicAnswerInfo(
                             topic.getTitle(),
                             topic.getDescription(),
                             topic.getConfirmOrder(),
@@ -275,8 +316,10 @@ public class ReadingTimelineService {
                     ))
                     .toList();
 
-            PersonalReadingTopicAnswerResponse response = new PersonalReadingTopicAnswerResponse(
+            ReadingTimelinePreOpinionResponse response = new ReadingTimelinePreOpinionResponse(
                     "PRE_OPINION",
+                    meeting.getGathering().getId(),
+                    meeting.getId(),
                     meeting.getGathering().getGatheringName(),
                     meeting.getMeetingStartDate(),
                     items

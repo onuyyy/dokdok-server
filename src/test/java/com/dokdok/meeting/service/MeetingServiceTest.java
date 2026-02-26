@@ -22,10 +22,14 @@ import com.dokdok.meeting.exception.MeetingErrorCode;
 import com.dokdok.meeting.exception.MeetingException;
 import com.dokdok.meeting.repository.MeetingMemberRepository;
 import com.dokdok.meeting.repository.MeetingRepository;
+import com.dokdok.retrospective.repository.PersonalRetrospectiveRepository;
+import com.dokdok.retrospective.repository.TopicRetrospectiveSummaryRepository;
 import com.dokdok.topic.entity.TopicStatus;
 import com.dokdok.topic.entity.TopicType;
 import com.dokdok.topic.repository.TopicAnswerRepository;
 import com.dokdok.topic.repository.TopicRepository;
+import com.dokdok.topic.service.TopicService;
+import com.dokdok.storage.service.StorageService;
 import com.dokdok.user.entity.User;
 import com.dokdok.user.service.UserValidator;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,6 +51,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.*;
 
@@ -67,6 +72,12 @@ class MeetingServiceTest {
 
     @Mock
     private TopicAnswerRepository topicAnswerRepository;
+
+    @Mock
+    private TopicService topicService;
+
+    @Mock
+    private StorageService storageService;
 
     @Mock
     private GatheringRepository gatheringRepository;
@@ -91,6 +102,12 @@ class MeetingServiceTest {
 
     @Mock
     private PersonalBookService personalBookService;
+
+    @Mock
+    private TopicRetrospectiveSummaryRepository topicRetrospectiveSummaryRepository;
+
+    @Mock
+    private PersonalRetrospectiveRepository personalRetrospectiveRepository;
 
     private Meeting meeting;
     private Long meetingId;
@@ -120,6 +137,12 @@ class MeetingServiceTest {
                 .gathering(gathering)
                 .book(sampleBook())
                 .build();
+
+        lenient().when(topicRepository.findConfirmedTopics(anyLong())).thenReturn(List.of());
+        lenient().when(topicRetrospectiveSummaryRepository.findAllByTopicIdIn(any()))
+                .thenReturn(List.of());
+        lenient().when(personalRetrospectiveRepository.existsByMeetingIdAndUserId(eq(meetingId), any()))
+                .thenReturn(false);
     }
 
     private Book sampleBook() {
@@ -212,6 +235,43 @@ class MeetingServiceTest {
             assertThat(upcoming.progressStatus()).isEqualTo(MeetingDetailProgressStatus.PRE);
             assertThat(ongoing.progressStatus()).isEqualTo(MeetingDetailProgressStatus.ONGOING);
             assertThat(finished.progressStatus()).isEqualTo(MeetingDetailProgressStatus.POST);
+        }
+    }
+
+    @DisplayName("약속 상세 조회 시 멤버 프로필 이미지는 presigned URL로 내려간다.")
+    @Test
+    void givenMeetingMembers_whenFindMeeting_thenUsePresignedProfileImage() {
+        // given
+        Long userId = 1L;
+        User memberUser = User.builder()
+                .id(2L)
+                .nickname("member")
+                .profileImageUrl("profiles/2/profile.jpg")
+                .build();
+        MeetingMember member = MeetingMember.builder()
+                .meeting(meeting)
+                .user(memberUser)
+                .build();
+
+        given(meetingValidator.findMeetingOrThrow(meetingId))
+                .willReturn(meeting);
+        given(meetingMemberRepository.findAllByMeetingId(meetingId))
+                .willReturn(List.of(member));
+        given(topicRepository.findConfirmedTopicDateByMeetingId(meetingId, TopicStatus.CONFIRMED))
+                .willReturn(null);
+        given(storageService.getPresignedProfileImage(memberUser.getProfileImageUrl()))
+                .willReturn("https://presigned.example.com/profile.jpg");
+
+        try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
+            securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
+
+            // when
+            MeetingDetailResponse response = meetingService.findMeeting(meetingId);
+
+            // then
+            assertThat(response.participants().members()).hasSize(1);
+            assertThat(response.participants().members().get(0).profileImageUrl())
+                    .isEqualTo("https://presigned.example.com/profile.jpg");
         }
     }
 
@@ -542,7 +602,13 @@ class MeetingServiceTest {
         Long gatheringLeaderId = 10L;
 
         given(meetingValidator.findMeetingOrThrow(meetingId)).willReturn(meeting);
-        given(meetingRepository.existsByGatheringIdAndMeetingStatus(gathering.getId(), MeetingStatus.CONFIRMED))
+        given(meetingRepository.existsOverlappingMeeting(
+                gathering.getId(),
+                MeetingStatus.CONFIRMED,
+                meetingId,
+                meeting.getMeetingStartDate(),
+                meeting.getMeetingEndDate()
+        ))
                 .willReturn(false);
         given(meetingMemberRepository.findByMeetingIdAndUserId(meetingId, leader.getId()))
                 .willReturn(Optional.empty());
@@ -561,17 +627,24 @@ class MeetingServiceTest {
             MeetingMember savedMember = meetingMemberCaptor.getValue();
             assertThat(savedMember.getUser().getId()).isEqualTo(leader.getId());
             assertThat(savedMember.getMeetingRole()).isEqualTo(MeetingMemberRole.LEADER);
+            verify(topicService).createDefaultTopic(meeting);
         }
     }
 
-    @DisplayName("이미 확정된 약속이 있으면 다른 약속을 확정할 수 없다.")
+    @DisplayName("시간이 겹치는 확정 약속이 있으면 다른 약속을 확정할 수 없다.")
     @Test
     void givenConfirmedMeetingExists_whenConfirm_thenThrowMeetingException() {
         // given
         Long meetingId = 1L;
         Long gatheringLeaderId = 10L;
         given(meetingValidator.findMeetingOrThrow(meetingId)).willReturn(meeting);
-        given(meetingRepository.existsByGatheringIdAndMeetingStatus(gathering.getId(), MeetingStatus.CONFIRMED))
+        given(meetingRepository.existsOverlappingMeeting(
+                gathering.getId(),
+                MeetingStatus.CONFIRMED,
+                meetingId,
+                meeting.getMeetingStartDate(),
+                meeting.getMeetingEndDate()
+        ))
                 .willReturn(true);
 
         try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
@@ -616,10 +689,18 @@ class MeetingServiceTest {
                 .id(meetingId)
                 .meetingName("Meeting 1")
                 .meetingStatus(MeetingStatus.PENDING)
+                .meetingStartDate(LocalDateTime.now().plusDays(2))
+                .meetingEndDate(LocalDateTime.now().plusDays(2).plusHours(1))
                 .gathering(gathering)
                 .build();
         given(meetingValidator.findMeetingOrThrow(meetingId)).willReturn(missingLeaderMeeting);
-        given(meetingRepository.existsByGatheringIdAndMeetingStatus(gathering.getId(), MeetingStatus.CONFIRMED))
+        given(meetingRepository.existsOverlappingMeeting(
+                gathering.getId(),
+                MeetingStatus.CONFIRMED,
+                meetingId,
+                missingLeaderMeeting.getMeetingStartDate(),
+                missingLeaderMeeting.getMeetingEndDate()
+        ))
                 .willReturn(false);
 
         try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
@@ -1372,6 +1453,8 @@ class MeetingServiceTest {
                 any(),
                 any()
         )).willReturn(List.of(myMeeting));
+        given(topicRepository.findMeetingIdsWithConfirmedTopics(List.of(myMeeting.getId())))
+                .willReturn(List.of(myMeeting.getId()));
 
         try (MockedStatic<SecurityUtil> mock = mockStatic(SecurityUtil.class)) {
             mock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
@@ -1416,6 +1499,8 @@ class MeetingServiceTest {
                 any(),
                 any()
         )).willReturn(List.of(upcomingMeeting));
+        given(topicRepository.findMeetingIdsWithConfirmedTopics(List.of(upcomingMeeting.getId())))
+                .willReturn(List.of());
 
         try (MockedStatic<SecurityUtil> mock = mockStatic(SecurityUtil.class)) {
             mock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
@@ -1446,8 +1531,10 @@ class MeetingServiceTest {
                 any(),
                 any()
         )).willReturn(2);
-        given(meetingMemberRepository.countMyMeetingsByStatus(userId, MeetingStatus.DONE))
-                .willReturn(3);
+        given(meetingMemberRepository.countMyMeetingsByStatusWithoutPersonalRetrospective(
+                userId,
+                MeetingStatus.DONE
+        )).willReturn(3);
 
         try (MockedStatic<SecurityUtil> mock = mockStatic(SecurityUtil.class)) {
             mock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);

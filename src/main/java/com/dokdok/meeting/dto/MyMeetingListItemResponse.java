@@ -38,6 +38,9 @@ public record MyMeetingListItemResponse(
         MeetingMyRole myRole,
 
         @Schema(description = "약속 진행 상태(시간 기준)", example = "UPCOMING")
-        MeetingProgressStatus progressStatus
+        MeetingProgressStatus progressStatus,
+
+        @Schema(description = "사전 의견 템플릿 확정 여부", example = "true")
+        boolean preOpinionTemplateConfirmed
 ) {
 }

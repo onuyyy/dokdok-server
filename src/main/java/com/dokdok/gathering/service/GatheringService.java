@@ -8,6 +8,7 @@ import com.dokdok.gathering.dto.response.*;
 import com.dokdok.gathering.entity.*;
 import com.dokdok.gathering.exception.GatheringErrorCode;
 import com.dokdok.gathering.exception.GatheringException;
+import com.dokdok.gathering.repository.GatheringCountProjection;
 import com.dokdok.gathering.repository.GatheringMemberRepository;
 import com.dokdok.gathering.repository.GatheringRepository;
 import com.dokdok.global.response.CursorResponse;
@@ -129,12 +130,19 @@ public class GatheringService {
 
         List<GatheringMember> favoriteMembers = gatheringMemberRepository.findFavoriteGatheringsByUserId(userId);
 
+        List<Long> gatheringIds = favoriteMembers.stream()
+                .map(gm -> gm.getGathering().getId())
+                .toList();
+
+        Map<Long, Integer> memberCountMap = getActiveMemberCountMap(gatheringIds);
+        Map<Long, Integer> meetingCountMap = getMeetingCountMap(gatheringIds);
+
         List<GatheringListItemResponse> gatheringResponses = favoriteMembers.stream()
-                .map(gatheringMember -> {
-                    Gathering gathering = gatheringMember.getGathering();
-                    int totalMembers = getActiveMemberCount(gathering.getId());
-                    int totalMeetings = getMeetingCount(gathering.getId());
-                    return GatheringListItemResponse.from(gatheringMember, totalMembers, totalMeetings, gatheringMember.getRole());
+                .map(gm -> {
+                    Long gatheringId = gm.getGathering().getId();
+                    int totalMembers = memberCountMap.getOrDefault(gatheringId, 0);
+                    int totalMeetings = meetingCountMap.getOrDefault(gatheringId, 0);
+                    return GatheringListItemResponse.from(gm, totalMembers, totalMeetings, gm.getRole());
                 })
                 .toList();
 
@@ -163,12 +171,20 @@ public class GatheringService {
         boolean hasNext = members.size() > pageSize;
         List<GatheringMember> pageMembers = hasNext ? members.subList(0, pageSize) : members;
 
+        List<Long> gatheringIds = pageMembers.stream()
+                .map(gm -> gm.getGathering().getId())
+                .toList();
+
+        Map<Long, Integer> memberCountMap = getActiveMemberCountMap(gatheringIds);
+        Map<Long, Integer> meetingCountMap = getMeetingCountMap(gatheringIds);
+
         List<GatheringListItemResponse> items = pageMembers.stream()
-                .map(gm -> GatheringListItemResponse.from(
-                        gm,
-                        getActiveMemberCount(gm.getGathering().getId()),
-                        getMeetingCount(gm.getGathering().getId()),
-                        gm.getRole()))
+                .map(gm ->{
+                    Long gatheringId = gm.getGathering().getId();
+                    int totalMembers = memberCountMap.getOrDefault(gatheringId, 0);
+                    int totalMeetings = meetingCountMap.getOrDefault(gatheringId, 0);
+                    return GatheringListItemResponse.from(gm, totalMembers, totalMeetings, gm.getRole());
+                })
                 .toList();
 
         GatheringMember lastMember = pageMembers.isEmpty() ? null : pageMembers.get(pageMembers.size() - 1);
@@ -419,4 +435,33 @@ public class GatheringService {
         return meetingRepository.countByGatheringIdAndMeetingStatus(gatheringId, MeetingStatus.DONE);
     }
 
+    /**
+     * 여러 모임의 활성 멤버 수를 Map으로 조회
+     */
+    private Map<Long, Integer> getActiveMemberCountMap(List<Long> gatheringIds) {
+        if(gatheringIds.isEmpty()) {
+            return Map.of();
+        }
+        return gatheringMemberRepository.countActiveMembersByGatherings(gatheringIds)
+                .stream()
+                .collect(Collectors.toMap(
+                        GatheringCountProjection::getGatheringId,
+                        p -> p.getCount().intValue()
+                ));
+    }
+
+    /**
+     * 여러 모임의 완료된 미팅 수를 Map으로 조회
+     */
+    private Map<Long, Integer> getMeetingCountMap(List<Long> gatheringIds) {
+        if (gatheringIds.isEmpty()) {
+            return Map.of();
+        }
+        return meetingRepository.countByGatheringIdsAndStatus(gatheringIds, MeetingStatus.DONE)
+                .stream()
+                .collect(Collectors.toMap(
+                        GatheringCountProjection::getGatheringId,
+                        p -> p.getCount().intValue()
+                ));
+    }
 }

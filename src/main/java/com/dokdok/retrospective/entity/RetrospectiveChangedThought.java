@@ -33,9 +33,6 @@ public class RetrospectiveChangedThought extends BaseTimeEntity {
     @Column(name = "key_issue", length = 255, nullable = false)
     private String keyIssue;
 
-    @Column(name = "pre_opinion", columnDefinition = "TEXT")
-    private String preOpinion;
-
     @Column(name = "post_opinion", columnDefinition = "TEXT")
     private String postOpinion;
 
@@ -43,14 +40,12 @@ public class RetrospectiveChangedThought extends BaseTimeEntity {
             Topic topic,
             PersonalMeetingRetrospective personalMeetingRetrospective,
             String keyIssue,
-            String preOpinion,
             String postOpinion
     ) {
         return RetrospectiveChangedThought.builder()
                 .topic(topic)
                 .personalMeetingRetrospective(personalMeetingRetrospective)
                 .keyIssue(keyIssue)
-                .preOpinion(preOpinion)
                 .postOpinion(postOpinion)
                 .build();
     }

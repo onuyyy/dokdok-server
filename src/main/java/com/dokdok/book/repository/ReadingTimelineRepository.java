@@ -33,7 +33,7 @@ public class ReadingTimelineRepository {
                         prr.created_at AS event_at,
                         'READING_RECORD' AS type,
                         prr.record_id AS source_id,
-                        3 AS type_order
+                        4 AS type_order
                     FROM personal_reading_record prr
                     WHERE prr.personal_book_id = :personalBookId
                       AND prr.user_id = :userId
@@ -45,7 +45,7 @@ public class ReadingTimelineRepository {
                         pmr.created_at AS event_at,
                         'PERSONAL_RETROSPECTIVE' AS type,
                         pmr.personal_meeting_retrospective_id AS source_id,
-                        2 AS type_order
+                        3 AS type_order
                     FROM personal_meeting_retrospective pmr
                     JOIN meeting m ON m.meeting_id = pmr.meeting_id
                     WHERE pmr.user_id = :userId
@@ -54,6 +54,21 @@ public class ReadingTimelineRepository {
                       AND CAST(:gatheringId AS bigint) IS NOT NULL
                       AND m.gathering_id = :gatheringId
                       AND m.book_id = :bookId
+
+                    UNION ALL
+
+                    SELECT
+                        m.retrospective_published_at AS event_at,
+                        'GROUP_RETROSPECTIVE' AS type,
+                        m.meeting_id AS source_id,
+                        2 AS type_order
+                    FROM meeting m
+                    WHERE m.deleted_at IS NULL
+                      AND CAST(:gatheringId AS bigint) IS NOT NULL
+                      AND m.gathering_id = :gatheringId
+                      AND m.book_id = :bookId
+                      AND m.retrospective_published = true
+                      AND m.retrospective_published_at IS NOT NULL
 
                     UNION ALL
 

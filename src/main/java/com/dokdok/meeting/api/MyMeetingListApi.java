@@ -62,7 +62,8 @@ public interface MyMeetingListApi {
                                             "endDateTime": "2025-02-01T16:00:00",
                                             "meetingStatus": "CONFIRMED",
                                             "myRole": "LEADER",
-                                            "progressStatus": "UPCOMING"
+                                            "progressStatus": "UPCOMING",
+                                            "preOpinionTemplateConfirmed": true
                                           }
                                         ],
                                         "totalCount": 8,

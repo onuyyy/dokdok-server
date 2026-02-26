@@ -2,7 +2,6 @@ package com.dokdok.retrospective.entity;
 
 import com.dokdok.global.BaseTimeEntity;
 import com.dokdok.meeting.entity.Meeting;
-import com.dokdok.topic.entity.Topic;
 import com.dokdok.user.entity.User;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -35,19 +34,14 @@ public class MeetingRetrospective extends BaseTimeEntity {
     @JoinColumn(name = "created_by", nullable = false)
     private User createdBy;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "topic_id")
-    private Topic topic;
-
     @Column(name = "comment", columnDefinition = "TEXT")
     private String comment;
 
-    public static MeetingRetrospective of(Meeting meeting, User user, Topic topic, String comment){
+    public static MeetingRetrospective of(Meeting meeting, User user, String comment){
         return MeetingRetrospective.builder()
                 .meeting(meeting)
                 .createdBy(user)
-                .topic(topic)
-                .comment(comment).
-                build();
+                .comment(comment)
+                .build();
     }
 }

@@ -1,12 +1,12 @@
 package com.dokdok.retrospective.service;
 
+import com.dokdok.meeting.entity.Meeting;
 import com.dokdok.meeting.entity.MeetingMember;
 import com.dokdok.retrospective.dto.projection.ChangedThoughtProjection;
 import com.dokdok.retrospective.dto.projection.FreeTextProjection;
 import com.dokdok.retrospective.dto.projection.OtherPerspectiveProjection;
 import com.dokdok.retrospective.dto.response.*;
 import com.dokdok.retrospective.entity.PersonalMeetingRetrospective;
-import com.dokdok.retrospective.entity.RetrospectiveChangedThought;
 import com.dokdok.retrospective.entity.RetrospectiveFreeText;
 import com.dokdok.retrospective.entity.RetrospectiveOthersPerspective;
 import com.dokdok.storage.service.StorageService;
@@ -29,7 +29,7 @@ public class PersonalRetrospectiveAssembler {
     private final StorageService storageService;
 
     public PersonalRetrospectiveFormResponse assembleCreate(
-            Long meetingId,
+            Meeting meeting,
             List<Topic> topics,
             List<TopicAnswer> topicAnswers,
             List<MeetingMember> meetingMembers
@@ -58,7 +58,8 @@ public class PersonalRetrospectiveAssembler {
         List<MemberInfo> memberDtos = toMemberDtos(meetingMembers);
 
         return PersonalRetrospectiveFormResponse.of(
-                meetingId,
+                meeting.getId(),
+                MeetingHeaderInfo.from(meeting),
                 preOpinions,
                 topicDtos,
                 memberDtos
@@ -66,17 +67,14 @@ public class PersonalRetrospectiveAssembler {
     }
 
     public PersonalRetrospectiveEditResponse assembleEdit(
+            Meeting meeting,
             Long retrospectiveId,
-            List<RetrospectiveChangedThought> changedThoughts,
+            List<PersonalRetrospectiveEditResponse.ChangedThought> changedThoughts,
             List<RetrospectiveOthersPerspective> othersPerspectives,
             List<RetrospectiveFreeText> freeTexts,
             List<Topic> topics,
             List<MeetingMember> meetingMembers
     ) {
-        List<PersonalRetrospectiveEditResponse.ChangedThought> changedThoughtList =
-                changedThoughts.stream()
-                        .map(PersonalRetrospectiveEditResponse.ChangedThought::from)
-                        .toList();
 
         List<PersonalRetrospectiveEditResponse.OthersPerspective> othersPerspectiveList =
                 othersPerspectives.stream()
@@ -93,7 +91,8 @@ public class PersonalRetrospectiveAssembler {
 
         return PersonalRetrospectiveEditResponse.from(
                 retrospectiveId,
-                changedThoughtList,
+                MeetingHeaderInfo.from(meeting),
+                changedThoughts,
                 othersPerspectiveList,
                 freeTextList,
                 topicDtos,
@@ -102,17 +101,13 @@ public class PersonalRetrospectiveAssembler {
     }
 
     public PersonalRetrospectiveDetailResponse assembleView(
+            Meeting meeting,
             Long retrospectiveId,
-            List<RetrospectiveChangedThought> changedThoughts,
+            List<PersonalRetrospectiveDetailResponse.ChangedThought> changedThoughts,
             List<RetrospectiveOthersPerspective> othersPerspectives,
             List<RetrospectiveFreeText> freeTexts
     ) {
         Map<Long, String> memberProfileImageMap = buildMemberProfileImageMap(othersPerspectives);
-
-        List<PersonalRetrospectiveDetailResponse.ChangedThought> changedThoughtList =
-                changedThoughts.stream()
-                        .map(PersonalRetrospectiveDetailResponse.ChangedThought::from)
-                        .toList();
 
         List<PersonalRetrospectiveDetailResponse.OthersPerspective> othersPerspectiveList =
                 othersPerspectives.stream()
@@ -129,7 +124,8 @@ public class PersonalRetrospectiveAssembler {
 
         return PersonalRetrospectiveDetailResponse.from(
                 retrospectiveId,
-                changedThoughtList,
+                MeetingHeaderInfo.from(meeting),
+                changedThoughts,
                 othersPerspectiveList,
                 freeTextList
         );

@@ -76,6 +76,11 @@ public class RetrospectiveValidator {
 
     }
 
+    public PersonalMeetingRetrospective getRetrospectiveByMeetingAndUser(Long meetingId, Long userId) {
+        return personalRetrospectiveRepository.findByMeeting_IdAndUser_Id(meetingId, userId)
+                .orElseThrow(() -> new RetrospectiveException(RetrospectiveErrorCode.RETROSPECTIVE_NOT_FOUND));
+    }
+
     public void validateMeetingRetrospectiveDeletePermission(MeetingRetrospective retrospective, Long userId) {
         // 삭제하는 사람이 작성자 본인인지 확인
         if (retrospective.getCreatedBy().getId().equals(userId)) {

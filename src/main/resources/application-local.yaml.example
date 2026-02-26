@@ -43,6 +43,12 @@ server:
     session:
       timeout: 30m  # 세션 타임아웃 30분
 
+ai:
+  api:
+    base-url: http://localhost:8000
+    summary-path: /summaries/topics
+    stt-path: /stt/summary
+
 # Swagger/OpenAPI Configuration
 springdoc:
   swagger-ui:

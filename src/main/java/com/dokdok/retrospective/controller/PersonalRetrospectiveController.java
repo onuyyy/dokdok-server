@@ -45,50 +45,45 @@ public class PersonalRetrospectiveController implements PersonalRetrospectiveApi
 
 
     @Override
-    @GetMapping("/{retrospectiveId}/form")
+    @GetMapping("/form/edit")
     public ResponseEntity<ApiResponse<PersonalRetrospectiveEditResponse>> getPersonalRetrospectiveEditForm(
-            @PathVariable Long meetingId,
-            @PathVariable Long retrospectiveId
+            @PathVariable Long meetingId
     ) {
         PersonalRetrospectiveEditResponse response
-                = personalRetrospectiveService.getPersonalRetrospectiveEditForm(meetingId, retrospectiveId);
+                = personalRetrospectiveService.getPersonalRetrospectiveEditForm(meetingId);
 
         return ApiResponse.success(response, "개인 회고 수정 폼 조회를 성공했습니다.");
     }
 
     @Override
-    @PutMapping("/{retrospectiveId}")
+    @PutMapping
     public ResponseEntity<ApiResponse<PersonalRetrospectiveResponse>> editPersonalRetrospective(
             @PathVariable Long meetingId,
-            @PathVariable Long retrospectiveId,
             @Valid @RequestBody PersonalRetrospectiveRequest request
     ) {
         PersonalRetrospectiveResponse response =
-                personalRetrospectiveService.editPersonalRetrospective(meetingId, retrospectiveId, request);
+                personalRetrospectiveService.editPersonalRetrospective(meetingId, request);
 
         return ApiResponse.success(response, "개인 회고 수정을 성공했습니다.");
     }
 
     @Override
-    @DeleteMapping("/{retrospectiveId}")
+    @DeleteMapping
     public ResponseEntity<ApiResponse<Void>> deletePersonalRetrospective(
-            @PathVariable Long meetingId,
-            @PathVariable Long retrospectiveId
+            @PathVariable Long meetingId
     ) {
-
-        personalRetrospectiveService.deletePersonalRetrospective(meetingId, retrospectiveId);
+        personalRetrospectiveService.deletePersonalRetrospective(meetingId);
 
         return ApiResponse.deleted("개인 회고 삭제를 성공했습니다.");
     }
 
     @Override
-    @GetMapping("/{retrospectiveId}")
+    @GetMapping
     public ResponseEntity<ApiResponse<PersonalRetrospectiveDetailResponse>> getPersonalRetrospective(
-            @PathVariable Long meetingId,
-            @PathVariable Long retrospectiveId
+            @PathVariable Long meetingId
     ) {
         PersonalRetrospectiveDetailResponse response
-                = personalRetrospectiveService.getPersonalRetrospective(meetingId, retrospectiveId);
+                = personalRetrospectiveService.getPersonalRetrospective(meetingId);
 
         return ApiResponse.success(response, "개인 회고 조회를 성공했습니다.");
     }

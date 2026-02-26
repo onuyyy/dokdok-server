@@ -19,6 +19,7 @@ import com.dokdok.topic.entity.Topic;
 import com.dokdok.topic.entity.TopicLike;
 import com.dokdok.topic.entity.TopicMessage;
 import com.dokdok.topic.entity.TopicStatus;
+import com.dokdok.topic.entity.TopicType;
 import com.dokdok.topic.exception.TopicErrorCode;
 import com.dokdok.topic.exception.TopicException;
 import com.dokdok.topic.repository.TopicAnswerRepository;
@@ -49,6 +50,32 @@ public class TopicService {
     private final GatheringValidator gatheringValidator;
     private final MeetingValidator meetingValidator;
     private final TopicValidator topicValidator;
+
+    @Transactional
+    public void createDefaultTopic(Meeting meeting) {
+        if (meeting == null || meeting.getId() == null) {
+            return;
+        }
+        if (topicRepository.countByMeetingIdAndDeletedAtIsNull(meeting.getId()) > 0) {
+            return;
+        }
+
+        User leader = meeting.getMeetingLeader();
+        if (leader == null) {
+            return;
+        }
+        TopicType type = TopicType.FREE;
+
+        Topic topic = Topic.create(
+                meeting,
+                leader,
+                type.getDisplayName(),
+                type.getDescription(),
+                type
+        );
+
+        topicRepository.save(topic);
+    }
 
     @Transactional
     public SuggestTopicResponse createTopic(

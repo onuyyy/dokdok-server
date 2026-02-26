@@ -10,6 +10,8 @@ import java.util.List;
 public record PersonalRetrospectiveFormResponse(
         @Schema(description = "약속 ID", example = "1")
         Long meetingId,
+        @Schema(description = "약속 헤더 정보")
+        MeetingHeaderInfo meetingHeaderInfo,
         @Schema(description = "사전 의견 목록")
         List<PreOpinions> preOpinions,
         @Schema(description = "확정된 주제 목록")
@@ -38,12 +40,14 @@ public record PersonalRetrospectiveFormResponse(
 
     public static PersonalRetrospectiveFormResponse of(
             Long meetingId,
+            MeetingHeaderInfo meetingHeaderInfo,
             List<PreOpinions> preOpinions,
             List<TopicInfo> topics,
             List<MemberInfo> meetingMembers
     ) {
         return new PersonalRetrospectiveFormResponse(
                 meetingId,
+                meetingHeaderInfo,
                 preOpinions,
                 topics,
                 meetingMembers

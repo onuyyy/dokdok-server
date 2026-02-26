@@ -35,7 +35,8 @@ public class RetrospectiveSummaryService {
 
         Meeting meeting = meetingValidator.findMeetingOrThrow(meetingId);
 
-        retrospectiveValidator.validateMeetingRetrospectiveAccess(meeting.getGathering().getId(), meetingId, userId);
+        // 모임장/약속장만 조회 가능
+        retrospectiveValidator.validateSummaryUpdatePermission(meeting.getGathering().getId(), meetingId, userId);
 
         // 확정된 토픽 조회
         List<Topic> topics = topicRepository.findByMeetingIdAndTopicStatusOrderByConfirmOrderAsc(
@@ -61,7 +62,7 @@ public class RetrospectiveSummaryService {
                 ))
                 .toList();
 
-        return RetrospectiveSummaryResponse.from(meetingId, topicResponses);
+        return RetrospectiveSummaryResponse.from(meeting, topicResponses);
     }
 
     @Transactional
@@ -95,6 +96,30 @@ public class RetrospectiveSummaryService {
         }
 
         // 수정된 결과 반환
+        return getRetrospectiveSummary(meetingId);
+    }
+
+    @Transactional
+    public RetrospectiveSummaryResponse publishRetrospective(Long meetingId) {
+        Long userId = SecurityUtil.getCurrentUserId();
+
+        Meeting meeting = meetingValidator.findMeetingOrThrow(meetingId);
+
+        // 권한 검증 (모임장/약속장만 생성 가능)
+        retrospectiveValidator.validateSummaryUpdatePermission(
+                meeting.getGathering().getId(),
+                meetingId,
+                userId
+        );
+
+        // 이미 생성된 경우 예외
+        if (meeting.isRetrospectivePublished()) {
+            throw new RetrospectiveException(RetrospectiveErrorCode.RETROSPECTIVE_ALREADY_PUBLISHED);
+        }
+
+        // 약속 회고 생성 (퍼블리시)
+        meeting.publishRetrospective();
+
         return getRetrospectiveSummary(meetingId);
     }
 }

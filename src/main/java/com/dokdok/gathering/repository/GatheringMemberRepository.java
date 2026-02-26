@@ -168,4 +168,17 @@ public interface GatheringMemberRepository extends JpaRepository<GatheringMember
             @Param("gatheringId") Long gatheringId,
             @Param("status") GatheringMemberStatus status
     );
+
+    /**
+     * 여러 모임의 ACTIVE 멤버 수를 한번에 조회
+     */
+    @Query("SELECT gm.gathering.id AS gatheringId, COUNT(gm) AS count " +
+            "FROM GatheringMember gm " +
+            "WHERE gm.gathering.id IN :gatheringIds " +
+            "AND gm.memberStatus = 'ACTIVE' " +
+            "AND gm.removedAt IS NULL " +
+            "GROUP BY gm.gathering.id")
+    List<GatheringCountProjection> countActiveMembersByGatherings(
+            @Param("gatheringIds") List<Long> gatheringIds
+    );
 }

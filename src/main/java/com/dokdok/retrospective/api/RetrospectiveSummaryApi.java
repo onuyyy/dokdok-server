@@ -17,6 +17,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
 @Tag(name = "AI 요약", description = "AI 요약 관련 API")
@@ -182,5 +183,53 @@ public interface RetrospectiveSummaryApi {
     ResponseEntity<ApiResponse<RetrospectiveSummaryResponse>> updateRetrospectiveSummary(
             @PathVariable Long meetingId,
             @Valid @RequestBody RetrospectiveSummaryUpdateRequest request
+    );
+
+    @Operation(
+            summary = "약속 회고 생성 (developer: 오주현)",
+            description = """
+                      약속 회고를 생성(퍼블리시)합니다.
+                      - 권한: 모임장, 약속장
+                      - 제약: 모임장 또는 약속장만 생성 가능
+                      - 생성 후 모든 약속 참여자가 공동 회고를 조회할 수 있습니다.
+                      """,
+            parameters = {
+                    @Parameter(name = "meetingId", description = "약속 식별자", in = ParameterIn.PATH, required = true)
+            }
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "201",
+                    description = "약속 회고 생성 성공",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = RetrospectiveSummaryResponse.class),
+                            examples = @ExampleObject(value = """
+                                      {
+                                        "code": "CREATED",
+                                        "message": "약속 회고 생성 성공",
+                                        "data": {
+                                          "meetingId": 1,
+                                          "isPublished": true,
+                                          "publishedAt": "2026-02-21T15:00:00",
+                                          "topics": [...]
+                                        }
+                                      }
+                                      """)
+                    )
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "접근 권한 없음",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            examples = @ExampleObject(value = """
+                                      {"code": "R105", "message": "회고에 접근할 권한이 없습니다.", "data": null}
+                                      """))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "이미 생성됨",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            examples = @ExampleObject(value = """
+                                      {"code": "R108", "message": "이미 약속 회고가 생성되었습니다.", "data": null}
+                                      """)))
+    })
+    @PostMapping(value = "/publish", produces = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<ApiResponse<RetrospectiveSummaryResponse>> publishRetrospective(
+            @PathVariable Long meetingId
     );
 }

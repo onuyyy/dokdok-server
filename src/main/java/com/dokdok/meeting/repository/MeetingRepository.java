@@ -1,5 +1,6 @@
 package com.dokdok.meeting.repository;
 
+import com.dokdok.gathering.repository.GatheringCountProjection;
 import com.dokdok.meeting.entity.Meeting;
 import com.dokdok.meeting.entity.MeetingStatus;
 import org.springframework.data.domain.Page;
@@ -19,6 +20,23 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
     boolean existsByIdAndGatheringId(Long meetingId, Long gatheringId);
   
     boolean existsByGatheringIdAndMeetingStatus(Long gatheringId, MeetingStatus meetingStatus);
+
+    @Query("""
+            SELECT CASE WHEN COUNT(m) > 0 THEN true ELSE false END
+            FROM Meeting m
+            WHERE m.gathering.id = :gatheringId
+            AND m.meetingStatus = :meetingStatus
+            AND m.id <> :meetingId
+            AND m.meetingStartDate < :endDate
+            AND m.meetingEndDate > :startDate
+            """)
+    boolean existsOverlappingMeeting(
+            @Param("gatheringId") Long gatheringId,
+            @Param("meetingStatus") MeetingStatus meetingStatus,
+            @Param("meetingId") Long meetingId,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate
+    );
 
     int countByGatheringIdAndMeetingStatus(Long gatheringId, MeetingStatus meetingStatus);
 
@@ -112,5 +130,15 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
             WHERE m.id IN :meetingIds
             """)
     List<Meeting> findByIdInWithGathering(@Param("meetingIds") List<Long> meetingIds);
+
+    /**
+     * 여러 모임의 완료된 미팅 수를 한번에 조회
+     */
+    @Query("SELECT m.gathering.id AS gatheringId, COUNT (m) AS count " +
+            "FROM Meeting m " +
+            "WHERE m.gathering.id IN :gatheringIds " +
+            "AND m.meetingStatus = :status " +
+            "GROUP BY m.gathering.id")
+    List<GatheringCountProjection> countByGatheringIdsAndStatus(@Param("gatheringIds") List<Long> gatheringIds, @Param("status") MeetingStatus status);
 
 }

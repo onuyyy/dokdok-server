@@ -121,6 +121,61 @@ class TopicServiceTest {
     }
 
     @Test
+    @DisplayName("기본 자유형 토픽이 없으면 생성한다")
+    void createDefaultTopic_Success() {
+        Meeting meeting = Meeting.builder()
+                .id(10L)
+                .meetingLeader(testUser)
+                .build();
+
+        given(topicRepository.countByMeetingIdAndDeletedAtIsNull(meeting.getId()))
+                .willReturn(0L);
+
+        topicService.createDefaultTopic(meeting);
+
+        var captor = org.mockito.ArgumentCaptor.forClass(Topic.class);
+        verify(topicRepository).save(captor.capture());
+        Topic saved = captor.getValue();
+        assertThat(saved.getMeeting()).isEqualTo(meeting);
+        assertThat(saved.getProposedBy()).isEqualTo(testUser);
+        assertThat(saved.getTopicType()).isEqualTo(TopicType.FREE);
+        assertThat(saved.getTitle()).isEqualTo(TopicType.FREE.getDisplayName());
+        assertThat(saved.getDescription()).isEqualTo(TopicType.FREE.getDescription());
+    }
+
+    @Test
+    @DisplayName("이미 토픽이 있으면 기본 토픽을 생성하지 않는다")
+    void createDefaultTopic_SkipWhenExists() {
+        Meeting meeting = Meeting.builder()
+                .id(10L)
+                .meetingLeader(testUser)
+                .build();
+
+        given(topicRepository.countByMeetingIdAndDeletedAtIsNull(meeting.getId()))
+                .willReturn(1L);
+
+        topicService.createDefaultTopic(meeting);
+
+        verify(topicRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("약속장이 없으면 기본 토픽을 생성하지 않는다")
+    void createDefaultTopic_SkipWhenLeaderMissing() {
+        Meeting meeting = Meeting.builder()
+                .id(10L)
+                .meetingLeader(null)
+                .build();
+
+        given(topicRepository.countByMeetingIdAndDeletedAtIsNull(meeting.getId()))
+                .willReturn(0L);
+
+        topicService.createDefaultTopic(meeting);
+
+        verify(topicRepository, never()).save(any());
+    }
+
+    @Test
     @DisplayName("선택한 주제를 확정 상태로 변경한다")
     void confirmTopics_Success() {
         Long gatheringId = 1L;

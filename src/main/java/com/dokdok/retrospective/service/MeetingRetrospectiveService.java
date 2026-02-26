@@ -11,6 +11,7 @@ import com.dokdok.retrospective.entity.TopicRetrospectiveSummary;
 import com.dokdok.retrospective.exception.RetrospectiveErrorCode;
 import com.dokdok.retrospective.exception.RetrospectiveException;
 import com.dokdok.retrospective.repository.RetrospectiveRepository;
+import com.dokdok.gathering.entity.GatheringRole;
 import com.dokdok.retrospective.repository.TopicRetrospectiveSummaryRepository;
 import com.dokdok.storage.service.StorageService;
 import com.dokdok.topic.entity.Topic;
@@ -18,7 +19,6 @@ import com.dokdok.topic.entity.TopicAnswer;
 import com.dokdok.topic.entity.TopicStatus;
 import com.dokdok.topic.repository.TopicAnswerRepository;
 import com.dokdok.topic.repository.TopicRepository;
-import com.dokdok.topic.service.TopicValidator;
 import com.dokdok.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -41,7 +41,6 @@ public class MeetingRetrospectiveService {
     private final TopicRetrospectiveSummaryRepository topicRetrospectiveSummaryRepository;
     private final RetrospectiveRepository retrospectiveRepository;
     private final MeetingValidator meetingValidator;
-    private final TopicValidator topicValidator;
     private final StorageService storageService;
     private final TopicAnswerRepository topicAnswerRepository;
 
@@ -53,7 +52,12 @@ public class MeetingRetrospectiveService {
 
         Meeting meeting = meetingValidator.findMeetingOrThrow(meetingId);
 
-        // 권한 검증
+        // 퍼블리시 여부 확인 (퍼블리시 후에만 접근 가능)
+        if (!meeting.isRetrospectivePublished()) {
+            throw new RetrospectiveException(RetrospectiveErrorCode.RETROSPECTIVE_NOT_PUBLISHED);
+        }
+
+        // 권한 검증 (약속 참여자 또는 모임장)
         retrospectiveValidator.validateMeetingRetrospectiveAccess(
                 meeting.getGathering().getId(),
                 meetingId,
@@ -78,9 +82,8 @@ public class MeetingRetrospectiveService {
     /**
      * 토픽별 코멘트 조회 (무한 스크롤)
      */
-    public CursorResponse<MeetingRetrospectiveResponse.CommentResponse, CommentCursor> getTopicComments(
+    public CursorResponse<MeetingRetrospectiveResponse.CommentResponse, CommentCursor> getComments(
             Long meetingId,
-            Long topicId,
             int pageSize,
             LocalDateTime cursorCreatedAt,
             Long cursorCommentId
@@ -88,11 +91,14 @@ public class MeetingRetrospectiveService {
         Long userId = SecurityUtil.getCurrentUserId();
         Meeting meeting = meetingValidator.findMeetingOrThrow(meetingId);
 
+        // 퍼블리시 여부 확인
+        if (!meeting.isRetrospectivePublished()) {
+            throw new RetrospectiveException(RetrospectiveErrorCode.RETROSPECTIVE_NOT_PUBLISHED);
+        }
+
         retrospectiveValidator.validateMeetingRetrospectiveAccess(meeting.getGathering().getId(), meetingId, userId);
 
-        topicValidator.getTopicInMeeting(topicId, meetingId);
-
-        return fetchComments(topicId, pageSize, cursorCreatedAt, cursorCommentId);
+        return fetchComments(meetingId, pageSize, cursorCreatedAt, cursorCommentId);
     }
 
     @Transactional
@@ -107,25 +113,27 @@ public class MeetingRetrospectiveService {
         // Meeting 조회
         Meeting meeting = meetingValidator.findMeetingOrThrow(meetingId);
 
+        // 퍼블리시 여부 확인
+        if (!meeting.isRetrospectivePublished()) {
+            throw new RetrospectiveException(RetrospectiveErrorCode.RETROSPECTIVE_NOT_PUBLISHED);
+        }
+
         // 권한 검증
         retrospectiveValidator.validateMeetingRetrospectiveAccess(meeting.getGathering().getId(),meetingId,userId);
 
-        // Topic 조회
-        Topic topic = topicValidator.getTopicInMeeting(request.topicId(), meetingId);
-
         // save
-        MeetingRetrospective retrospective = MeetingRetrospective.of(meeting, user, topic, request.comment());
+        MeetingRetrospective retrospective = MeetingRetrospective.of(meeting, user, request.comment());
         MeetingRetrospective saved = retrospectiveRepository.save(retrospective);
 
         return buildCommentResponse(saved);
     }
 
     @Transactional
-    public void deleteMeetingRetrospective(Long meetingId, Long meetingRetrospectiveId) {
+    public void deleteMeetingRetrospective(Long meetingId, Long commentId) {
         Long userId = SecurityUtil.getCurrentUserId();
 
         MeetingRetrospective retrospective = retrospectiveRepository
-                .findByIdAndMeetingId(meetingRetrospectiveId, meetingId)
+                .findByIdAndMeetingId(commentId, meetingId)
                 .orElseThrow(() -> new RetrospectiveException(RetrospectiveErrorCode.MEETING_RETROSPECTIVE_NOT_FOUND));
 
         retrospectiveValidator.validateMeetingRetrospectiveDeletePermission(retrospective, userId);
@@ -148,7 +156,7 @@ public class MeetingRetrospectiveService {
     }
 
     private CursorResponse<MeetingRetrospectiveResponse.CommentResponse, CommentCursor> fetchComments(
-            Long topicId,
+            Long meetingId,
             int pageSize,
             LocalDateTime cursorCreatedAt,
             Long cursorCommentId
@@ -157,8 +165,8 @@ public class MeetingRetrospectiveService {
         boolean isFirstPage = cursorCreatedAt == null || cursorCommentId == null;
 
         List<MeetingRetrospective> comments = isFirstPage
-                ? retrospectiveRepository.findByTopicIdFirstPage(topicId, pageable)
-                : retrospectiveRepository.findByTopicIdAfterCursor(topicId, cursorCreatedAt, cursorCommentId, pageable);
+                ? retrospectiveRepository.findByMeetingIdFirstPage(meetingId, pageable)
+                : retrospectiveRepository.findByMeetingIdAfterCursor(meetingId, cursorCreatedAt, cursorCommentId, pageable);
 
         boolean hasNext = comments.size() > pageSize;
         List<MeetingRetrospective> pageComments = hasNext
@@ -170,7 +178,7 @@ public class MeetingRetrospectiveService {
                 .toList();
 
         CommentCursor nextCursor = buildNextCursor(pageComments, hasNext);
-        Integer totalCount = isFirstPage ? retrospectiveRepository.countByTopicId(topicId) : null;
+        Integer totalCount = isFirstPage ? retrospectiveRepository.countByMeetingId(meetingId) : null;
 
         return CursorResponse.of(items, pageSize, hasNext, nextCursor, totalCount);
     }

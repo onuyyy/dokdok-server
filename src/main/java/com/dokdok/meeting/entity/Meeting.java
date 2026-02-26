@@ -64,6 +64,13 @@ public class Meeting extends BaseTimeEntity {
     @Column(name = "meeting_end_date")
     private LocalDateTime meetingEndDate;
 
+    @Column(name = "retrospective_published")
+    @Builder.Default
+    private Boolean retrospectivePublished = false;
+
+    @Column(name = "retrospective_published_at")
+    private LocalDateTime retrospectivePublishedAt;
+
     public static Meeting create(MeetingCreateRequest request, Gathering gathering, Book book, User user,
                                  Integer maxParticipants) {
         String meetingName = request.meetingName();
@@ -141,6 +148,15 @@ public class Meeting extends BaseTimeEntity {
     public String getFormattedTime() {
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("HH:mm");
         return meetingStartDate.format(formatter) + "-" + meetingEndDate.format(formatter);
+    }
+
+    public void publishRetrospective() {
+        this.retrospectivePublished = true;
+        this.retrospectivePublishedAt = LocalDateTime.now();
+    }
+
+    public boolean isRetrospectivePublished() {
+        return Boolean.TRUE.equals(this.retrospectivePublished);
     }
 
 }

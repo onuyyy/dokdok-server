@@ -3,6 +3,8 @@ package com.dokdok.retrospective.dto.response;
 import com.dokdok.retrospective.entity.RetrospectiveChangedThought;
 import com.dokdok.retrospective.entity.RetrospectiveFreeText;
 import com.dokdok.retrospective.entity.RetrospectiveOthersPerspective;
+import com.dokdok.topic.entity.Topic;
+import com.dokdok.topic.entity.TopicAnswer;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
@@ -11,6 +13,8 @@ import java.util.List;
 public record PersonalRetrospectiveDetailResponse(
         @Schema(description = "개인 회고 ID", example = "1")
         Long retrospectiveId,
+        @Schema(description = "약속 헤더 정보")
+        MeetingHeaderInfo meetingHeaderInfo,
         @Schema(description = "개인 회고 데이터")
         RetrospectiveData retrospective
 ) {
@@ -39,13 +43,13 @@ public record PersonalRetrospectiveDetailResponse(
             @Schema(description = "사후 의견", example = "토론 후 바뀐 생각")
             String postOpinion
     ) {
-        public static ChangedThought from(RetrospectiveChangedThought changedThought) {
+        public static ChangedThought of(Topic topic, RetrospectiveChangedThought ct, TopicAnswer ta) {
             return new ChangedThought(
-                    changedThought.getTopic().getId(),
-                    changedThought.getTopic().getTitle(),
-                    changedThought.getKeyIssue(),
-                    changedThought.getPreOpinion(),
-                    changedThought.getPostOpinion()
+                    topic.getId(),
+                    topic.getTitle(),
+                    ct != null ? ct.getKeyIssue() : null,
+                    ta != null ? ta.getContent() : null,
+                    ct != null ? ct.getPostOpinion() : null
             );
         }
     }
@@ -54,6 +58,8 @@ public record PersonalRetrospectiveDetailResponse(
     public record OthersPerspective(
             @Schema(description = "주제 ID", example = "1")
             Long topicId,
+            @Schema(description = "주제 제목", example = "깨끗한 코드")
+            String topicTitle,
             @Schema(description = "약속 멤버 ID", example = "10")
             Long meetingMemberId,
             @Schema(description = "프로필 이미지 URL", example = "https://example.com/profile.jpg")
@@ -73,8 +79,13 @@ public record PersonalRetrospectiveDetailResponse(
                     ? othersPerspective.getTopic().getId()
                     : null;
 
+            String topicTitle = othersPerspective.getTopic() != null
+                    ? othersPerspective.getTopic().getTitle()
+                    : null;
+
             return new OthersPerspective(
                     topicId,
+                    topicTitle,
                     othersPerspective.getMeetingMember().getId(),
                     profileImage,
                     othersPerspective.getMeetingMember().getUser().getNickname(),
@@ -101,12 +112,14 @@ public record PersonalRetrospectiveDetailResponse(
 
     public static PersonalRetrospectiveDetailResponse from(
             Long retrospectiveId,
+            MeetingHeaderInfo meetingHeaderInfo,
             List<ChangedThought> changedThoughts,
             List<OthersPerspective> othersPerspectives,
             List<FreeText> freeTexts
     ) {
         return new PersonalRetrospectiveDetailResponse(
                 retrospectiveId,
+                meetingHeaderInfo,
                 new RetrospectiveData(changedThoughts, othersPerspectives, freeTexts)
         );
     }

@@ -52,6 +52,7 @@ public interface MeetingRetrospectiveApi {
                                           "meetingName": "데미안을 읽어보아요",
                                           "meetingDate": "2026-01-15",
                                           "meetingTime": "19:00-20:00",
+                                          "meetingLeaderId": 123,
                                           "gathering": {
                                             "gatheringId": 1,
                                             "gatheringName": "독서 모임"
@@ -114,9 +115,9 @@ public interface MeetingRetrospectiveApi {
     );
 
     @Operation(
-            summary = "토픽별 코멘트 조회 (developer: 오주현)",
+            summary = "코멘트 조회 (developer: 오주현)",
             description = """                                                                                                                                                    
-                  특정 토픽의 코멘트를 조회합니다.
+                  약속 회고의 코멘트를 조회합니다.
                   - 커서 기반 무한스크롤을 지원합니다.
                   - 첫 페이지: cursorCreatedAt, cursorCommentId 없이 호출
                   - 다음 페이지: 응답의 nextCursor 값을 파라미터로 전달
@@ -133,11 +134,11 @@ public interface MeetingRetrospectiveApi {
                             examples = @ExampleObject(value = """                                                                                                                
                                       {
                                         "code": "SUCCESS",
-                                        "message": "토픽 코멘트 조회 성공",
+                                        "message": "코멘트 조회 성공",
                                         "data": {
                                           "items": [
                                             {
-                                              "meetingRetrospectiveId": 1,
+                                              "commentId": 1,
                                               "userId": 1,
                                               "nickname": "사용자1",
                                               "profileImageUrl": "https://example.com/profile.jpg",
@@ -179,20 +180,13 @@ public interface MeetingRetrospectiveApi {
             ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "404",
-                    description = "약속 또는 토픽을 찾을 수 없음",
+                    description = "약속을 찾을 수 없음",
                     content = @Content(
                             mediaType = MediaType.APPLICATION_JSON_VALUE,
                             examples = {
                                     @ExampleObject(
-                                            name = "약속 없음",
                                             value = """                                                                                                                          
                                                       {"code": "M001", "message": "약속을 찾을 수 없습니다.", "data": null}
-                                                      """
-                                    ),
-                                    @ExampleObject(
-                                            name = "토픽 없음",
-                                            value = """                                                                                                                          
-                                                      {"code": "T001", "message": "토픽을 찾을 수 없습니다.", "data": null}
                                                       """
                                     )
                             }
@@ -213,9 +207,6 @@ public interface MeetingRetrospectiveApi {
     ResponseEntity<ApiResponse<CursorResponse<MeetingRetrospectiveResponse.CommentResponse, CommentCursor>>> getTopicComments(
             @Parameter(description = "약속 ID", required = true, example = "1")
             @PathVariable Long meetingId,
-
-            @Parameter(description = "토픽 ID", required = true, example = "1")
-            @RequestParam Long topicId,
 
             @Parameter(description = "페이지 크기", example = "10")
             @RequestParam(defaultValue = "10") int pageSize,
@@ -248,7 +239,7 @@ public interface MeetingRetrospectiveApi {
                                         "code": "CREATED",
                                         "message": "공동 회고 작성 완료",
                                         "data": {
-                                          "meetingRetrospectiveId": 1,
+                                          "commentId": 1,
                                           "userId": 1,
                                           "nickname": "독서왕",
                                           "profileImageUrl": "https://example.com/profile.jpg",
@@ -295,11 +286,11 @@ public interface MeetingRetrospectiveApi {
             summary = "공동 회고 코멘트 삭제 (developer: 오주현)",
             description = """
             약속에 대한 공동 회고 코멘트를 삭제합니다.
-            - 권한: 작성자 또는 모임장
+            - 권한: 작성자 또는 약속장
             """,
             parameters = {
                     @Parameter(name = "meetingId", description = "약속 식별자", in = ParameterIn.PATH, required = true),
-                    @Parameter(name = "meetingRetrospectiveId", description = "공동 회고 식별자", in = ParameterIn.PATH, required = true)
+                    @Parameter(name = "commentId", description = "코멘트 식별자", in = ParameterIn.PATH, required = true)
             }
     )
     @ApiResponses({
@@ -325,10 +316,10 @@ public interface MeetingRetrospectiveApi {
                                     {"code": "E000", "message": "서버 에러가 발생했습니다. 담당자에게 문의 바랍니다.", "data": null}
                                     """)))
     })
-    @DeleteMapping(path = "/{meetingRetrospectiveId}", produces = MediaType.APPLICATION_JSON_VALUE)
+    @DeleteMapping(path = "/{commentId}", produces = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<ApiResponse<Void>> deleteMeetingRetrospective(
             @PathVariable Long meetingId,
-            @PathVariable Long meetingRetrospectiveId
+            @PathVariable Long commentId
     );
 
     @Operation(

@@ -38,4 +38,14 @@ public class RetrospectiveSummaryController implements RetrospectiveSummaryApi {
 
         return ApiResponse.success(response, "AI 요약 수정 성공");
     }
+
+    @Override
+    @PostMapping("/publish")
+    public ResponseEntity<ApiResponse<RetrospectiveSummaryResponse>> publishRetrospective(
+            @PathVariable Long meetingId
+    ) {
+        RetrospectiveSummaryResponse response = retrospectiveSummaryService.publishRetrospective(meetingId);
+
+        return ApiResponse.created(response, "약속 회고 생성 성공");
+    }
 }

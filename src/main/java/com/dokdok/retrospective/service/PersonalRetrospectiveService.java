@@ -39,6 +39,8 @@ import java.util.Optional;
 
 import org.springframework.data.domain.PageRequest;
 
+import java.util.stream.Collectors;
+
 import static java.util.stream.Collectors.groupingBy;
 
 @Service
@@ -83,7 +85,7 @@ public class PersonalRetrospectiveService {
 
         Long userId = SecurityUtil.getCurrentUserId();
 
-        meetingValidator.validateMeeting(meetingId);
+        Meeting meeting = meetingValidator.findMeetingOrThrow(meetingId);
         meetingValidator.validateMeetingMember(meetingId, userId);
         retrospectiveValidator.validateRetrospective(meetingId, userId);
 
@@ -92,7 +94,7 @@ public class PersonalRetrospectiveService {
         List<MeetingMember> meetingMembers = meetingMemberRepository.findOtherMembersByMeetingId(meetingId, userId);
 
         return assembler.assembleCreate(
-                meetingId,
+                meeting,
                 topics,
                 topicAnswers,
                 meetingMembers
@@ -100,16 +102,17 @@ public class PersonalRetrospectiveService {
     }
 
     @Transactional(readOnly = true)
-    public PersonalRetrospectiveEditResponse getPersonalRetrospectiveEditForm(
-            Long meetingId,
-            Long retrospectiveId
-    ) {
+    public PersonalRetrospectiveEditResponse getPersonalRetrospectiveEditForm(Long meetingId) {
 
         Long userId = SecurityUtil.getCurrentUserId();
 
         meetingValidator.validateMeeting(meetingId);
         meetingValidator.validateMeetingMember(meetingId, userId);
-        retrospectiveValidator.validateRetrospective(retrospectiveId);
+
+        PersonalMeetingRetrospective retrospective
+                = retrospectiveValidator.getRetrospectiveByMeetingAndUser(meetingId, userId);
+        Long retrospectiveId = retrospective.getId();
+        Meeting meeting = retrospective.getMeeting();
 
         List<RetrospectiveChangedThought> changedThoughts
                 = changedThoughtRepository.findByPersonalMeetingRetrospective(retrospectiveId);
@@ -122,12 +125,30 @@ public class PersonalRetrospectiveService {
 
         List<Topic> topics = topicValidator.getConfirmedTopics(meetingId);
 
+        List<TopicAnswer> topicAnswers = topicAnswerRepository.findByMeetingIdUserId(meetingId, userId);
+        Map<Long, TopicAnswer> taMap = topicAnswers.stream()
+                .collect(Collectors.toMap(ta -> ta.getTopic().getId(), ta -> ta));
+
+        Map<Long, RetrospectiveChangedThought> ctMap = changedThoughts.stream()
+                .collect(Collectors.toMap(ct -> ct.getTopic().getId(), ct -> ct));
+
+        List<PersonalRetrospectiveEditResponse.ChangedThought> mergedChangedThoughts = topics.stream()
+                .map(topic -> {
+                    RetrospectiveChangedThought ct = ctMap.get(topic.getId());
+                    TopicAnswer ta = taMap.get(topic.getId());
+                    return ct != null
+                            ? PersonalRetrospectiveEditResponse.ChangedThought.of(ct, ta)
+                            : PersonalRetrospectiveEditResponse.ChangedThought.empty(topic.getId(), ta);
+                })
+                .toList();
+
         List<MeetingMember> meetingMembers
                 = meetingMemberRepository.findOtherMembersByMeetingId(meetingId, userId);
 
         return assembler.assembleEdit(
+                meeting,
                 retrospectiveId,
-                changedThoughts,
+                mergedChangedThoughts,
                 othersPerspectives,
                 freeTexts,
                 topics,
@@ -138,16 +159,14 @@ public class PersonalRetrospectiveService {
     @Transactional
     public PersonalRetrospectiveResponse editPersonalRetrospective(
             Long meetingId,
-            Long retrospectiveId,
             PersonalRetrospectiveRequest request
     ) {
         Long userId = SecurityUtil.getCurrentUserId();
 
         meetingValidator.validateMeeting(meetingId);
         meetingValidator.validateMeetingMember(meetingId, userId);
-        retrospectiveValidator.validateRetrospective(retrospectiveId);
         PersonalMeetingRetrospective retrospective
-                = retrospectiveValidator.getRetrospective(retrospectiveId, userId);
+                = retrospectiveValidator.getRetrospectiveByMeetingAndUser(meetingId, userId);
 
         retrospective.clearChangedThoughts();
         retrospective.clearOthersPerspectives();
@@ -230,29 +249,29 @@ public class PersonalRetrospectiveService {
     }
 
     @Transactional
-    public void deletePersonalRetrospective(Long meetingId, Long retrospectiveId) {
+    public void deletePersonalRetrospective(Long meetingId) {
         Long userId = SecurityUtil.getCurrentUserId();
 
         meetingValidator.validateMeeting(meetingId);
         meetingValidator.validateMeetingMember(meetingId, userId);
 
         PersonalMeetingRetrospective retrospective
-                = retrospectiveValidator.getRetrospective(retrospectiveId, userId);
+                = retrospectiveValidator.getRetrospectiveByMeetingAndUser(meetingId, userId);
 
         retrospective.softDelete();
     }
 
     @Transactional(readOnly = true)
-    public PersonalRetrospectiveDetailResponse getPersonalRetrospective(
-            Long meetingId,
-            Long retrospectiveId
-    ) {
+    public PersonalRetrospectiveDetailResponse getPersonalRetrospective(Long meetingId) {
         Long userId = SecurityUtil.getCurrentUserId();
 
         meetingValidator.validateMeeting(meetingId);
         meetingValidator.validateMeetingMember(meetingId, userId);
-        retrospectiveValidator.validateRetrospective(retrospectiveId);
-        retrospectiveValidator.validateRetrospectiveByUser(retrospectiveId, userId);
+
+        PersonalMeetingRetrospective retrospective
+                = retrospectiveValidator.getRetrospectiveByMeetingAndUser(meetingId, userId);
+        Long retrospectiveId = retrospective.getId();
+        Meeting meeting = retrospective.getMeeting();
 
         List<RetrospectiveChangedThought> changedThoughts
                 = changedThoughtRepository.findByPersonalMeetingRetrospective(retrospectiveId);
@@ -263,9 +282,26 @@ public class PersonalRetrospectiveService {
         List<RetrospectiveFreeText> freeTexts =
                 freeTextRepository.findByPersonalMeetingRetrospective_Id(retrospectiveId);
 
+        List<Topic> topics = topicValidator.getConfirmedTopics(meetingId);
+        List<TopicAnswer> topicAnswers = topicAnswerRepository.findByMeetingIdUserId(meetingId, userId);
+
+        Map<Long, RetrospectiveChangedThought> ctMap = changedThoughts.stream()
+                .collect(Collectors.toMap(ct -> ct.getTopic().getId(), ct -> ct));
+        Map<Long, TopicAnswer> taMap = topicAnswers.stream()
+                .collect(Collectors.toMap(ta -> ta.getTopic().getId(), ta -> ta));
+
+        List<PersonalRetrospectiveDetailResponse.ChangedThought> mergedChangedThoughts = topics.stream()
+                .map(topic -> PersonalRetrospectiveDetailResponse.ChangedThought.of(
+                        topic,
+                        ctMap.get(topic.getId()),
+                        taMap.get(topic.getId())
+                ))
+                .toList();
+
         return assembler.assembleView(
+                meeting,
                 retrospectiveId,
-                changedThoughts,
+                mergedChangedThoughts,
                 othersPerspectives,
                 freeTexts
         );
@@ -282,15 +318,10 @@ public class PersonalRetrospectiveService {
             for (var thought : request.changedThoughts()) {
                 Topic topic = topicValidator.getTopicInMeeting(thought.topicId(), meetingId);
 
-                // preOpinion은 TopicAnswer에서 조회
-                TopicAnswer topicAnswer = topicAnswerRepository.findPreOpinion(topic.getId(), userId);
-                String preOpinion = topicAnswer != null ? topicAnswer.getContent() : null;
-
                 RetrospectiveChangedThought changedThought = RetrospectiveChangedThought.create(
                         topic,
                         retrospective,
                         thought.keyIssue(),
-                        preOpinion,
                         thought.postOpinion()
                 );
 

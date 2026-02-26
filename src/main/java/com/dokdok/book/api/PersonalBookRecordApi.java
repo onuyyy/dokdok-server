@@ -613,9 +613,10 @@ public interface PersonalBookRecordApi {
     @Operation(
             summary = "독서 타임라인 조회 (developer: 권우희)",
             description = """
-                    독서 기록/사전 의견/개인 회고를 하나의 타임라인으로 커서 기반 조회합니다.
+                    독서 기록/사전 의견/개인 회고/공동 회고를 하나의 타임라인으로 커서 기반 조회합니다.
                     - personalBook의 gatheringId가 null이면 사전 의견/회고는 제외됩니다.
                     - 사전 의견(PRE_OPINION)은 **내 답변이 있는 미팅만** 포함합니다.
+                    - PRE_OPINION의 preOpinion 객체에는 gatheringId/meetingId가 포함됩니다.
                     - 정렬: eventAt DESC, typeOrder DESC, sourceId DESC
                     - preOpinionTime: 사전 의견 정렬 기준 (MEETING_START | ANSWER_CREATED, 기본값 ANSWER_CREATED)
 
@@ -666,7 +667,7 @@ public interface PersonalBookRecordApi {
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
             LocalDateTime cursorEventAt,
-            @Parameter(description = "커서 - 마지막 이벤트 타입 (READING_RECORD | PERSONAL_RETROSPECTIVE | PRE_OPINION)")
+            @Parameter(description = "커서 - 마지막 이벤트 타입 (READING_RECORD | PERSONAL_RETROSPECTIVE | GROUP_RETROSPECTIVE | PRE_OPINION)")
             @RequestParam(required = false) ReadingTimelineType cursorType,
             @Parameter(description = "커서 - 마지막 이벤트 원본 ID")
             @RequestParam(required = false) Long cursorSourceId,

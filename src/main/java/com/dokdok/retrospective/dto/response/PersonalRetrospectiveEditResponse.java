@@ -3,6 +3,7 @@ package com.dokdok.retrospective.dto.response;
 import com.dokdok.retrospective.entity.RetrospectiveChangedThought;
 import com.dokdok.retrospective.entity.RetrospectiveFreeText;
 import com.dokdok.retrospective.entity.RetrospectiveOthersPerspective;
+import com.dokdok.topic.entity.TopicAnswer;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
@@ -11,6 +12,8 @@ import java.util.List;
 public record PersonalRetrospectiveEditResponse(
         @Schema(description = "개인 회고 ID", example = "1")
         Long retrospectiveId,
+        @Schema(description = "약속 헤더 정보")
+        MeetingHeaderInfo meetingHeaderInfo,
         @Schema(description = "개인 회고 데이터")
         RetrospectiveData retrospective,  // 작성 데이터 묶음
         @Schema(description = "확정된 주제 목록")
@@ -40,12 +43,21 @@ public record PersonalRetrospectiveEditResponse(
             @Schema(description = "사후 의견", example = "토론 후 바뀐 생각")
             String postOpinion
     ) {
-        public static ChangedThought from(RetrospectiveChangedThought changedThought) {
+        public static ChangedThought of(RetrospectiveChangedThought ct, TopicAnswer ta) {
             return new ChangedThought(
-                    changedThought.getTopic().getId(),
-                    changedThought.getKeyIssue(),
-                    changedThought.getPreOpinion(),
-                    changedThought.getPostOpinion()
+                    ct.getTopic().getId(),
+                    ct.getKeyIssue(),
+                    ta != null ? ta.getContent() : null,
+                    ct.getPostOpinion()
+            );
+        }
+
+        public static ChangedThought empty(Long topicId, TopicAnswer ta) {
+            return new ChangedThought(
+                    topicId,
+                    null,
+                    ta != null ? ta.getContent() : null,
+                    null
             );
         }
     }
@@ -92,6 +104,7 @@ public record PersonalRetrospectiveEditResponse(
 
     public static PersonalRetrospectiveEditResponse from(
             Long retrospectiveId,
+            MeetingHeaderInfo meetingHeaderInfo,
             List<ChangedThought> changedThoughts,
             List<OthersPerspective> othersPerspectives,
             List<FreeText> freeTexts,
@@ -100,6 +113,7 @@ public record PersonalRetrospectiveEditResponse(
     ) {
         return new PersonalRetrospectiveEditResponse(
                 retrospectiveId,
+                meetingHeaderInfo,
                 new RetrospectiveData(changedThoughts, othersPerspectives, freeTexts), // 묶어서 전달
                 topics,
                 meetingMembers

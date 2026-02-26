@@ -229,6 +229,17 @@ public interface TopicRepository extends JpaRepository<Topic, Long> {
     );
 
     @Query("""
+            SELECT DISTINCT t.meeting.id
+            FROM Topic t
+            WHERE t.meeting.id IN :meetingIds
+            AND t.topicStatus = com.dokdok.topic.entity.TopicStatus.CONFIRMED
+            AND t.deletedAt IS NULL
+            """)
+    List<Long> findMeetingIdsWithConfirmedTopics(
+            @Param("meetingIds") List<Long> meetingIds
+    );
+
+    @Query("""
             SELECT MAX(t.updatedAt)
             FROM Topic t
             WHERE t.meeting.id = :meetingId

@@ -1,6 +1,9 @@
 package com.dokdok.book.api;
 
 import com.dokdok.book.dto.request.BookCreateRequest;
+import com.dokdok.book.dto.request.BookBulkDeleteRequest;
+import com.dokdok.book.dto.request.PersonalBookSortBy;
+import com.dokdok.book.dto.request.PersonalBookSortOrder;
 import com.dokdok.book.dto.response.*;
 import com.dokdok.book.entity.BookReadingStatus;
 import com.dokdok.global.response.ApiResponse;
@@ -14,13 +17,13 @@ import jakarta.validation.Valid;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.repository.query.Param;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 @Tag(name = "책 관리", description = "책 검색 및 내 책장 관리 API")
@@ -214,8 +217,11 @@ public interface BookApi {
             description = """
                     내 책장에 등록된 책을 커서 기반으로 조회합니다.
                     - 로그인한 사용자 기준으로 조회합니다.
-                    - cursorAddedAt/cursorBookId/size 파라미터로 다음 페이지를 조회합니다.
                     - 독서 상태 필터 (ENUM: READING/COMPLETED/PENDING)
+                    - 별점 범위 필터: minRating/maxRating (포함 범위)
+                    - 정렬 파라미터: sortBy(TIME|RATING), sortOrder(DESC|ASC)
+                    - 커서 파라미터: cursorRating/cursorAddedAt/cursorBookId
+                    - 책이 없는 경우에도 200 응답이며 items는 빈 배열입니다.
                     """
     )
     @ApiResponses({
@@ -223,7 +229,7 @@ public interface BookApi {
                     responseCode = "200",
                     description = "책 리스트 조회 성공",
                     content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
-                            schema = @Schema(implementation = PersonalBookListResponse.class),
+                            schema = @Schema(implementation = PersonalBookCursorPageResponse.class),
                             examples = @io.swagger.v3.oas.annotations.media.ExampleObject(
                                     value = """
                                             {
@@ -238,12 +244,25 @@ public interface BookApi {
                                                     "authors": "저자A, 저자B",
                                                     "bookReadingStatus": "READING",
                                                     "thumbnail": "https://example.com/thumb.jpg",
-                                                    "gatheringName": "예제 모임"
+                                                    "rating": 4.5,
+                                                    "gatherings": [
+                                                      {
+                                                        "gatheringId": 10,
+                                                        "gatheringName": "예제 모임"
+                                                      }
+                                                    ]
                                                   }
                                                 ],
+                                                "statusCounts": {
+                                                  "reading": 12,
+                                                  "completed": 7,
+                                                  "pending": 3,
+                                                  "total": 22
+                                                },
                                                 "pageSize": 10,
                                                 "hasNext": true,
                                                 "nextCursor": {
+                                                  "rating": 4.5,
                                                   "addedAt": "2026-01-22T10:25:40Z",
                                                   "bookId": 127
                                                 },
@@ -306,9 +325,19 @@ public interface BookApi {
             )
     })
     @GetMapping
-    ResponseEntity<ApiResponse<CursorPageResponse<PersonalBookListResponse, BookListCursor>>> getMyBooks(
+    ResponseEntity<ApiResponse<PersonalBookCursorPageResponse>> getMyBooks(
             @RequestParam(required = false) BookReadingStatus readingStatus,
             @RequestParam(required = false) Long gatheringId,
+            @Parameter(description = "정렬 기준 (TIME | RATING)", example = "TIME")
+            @RequestParam(required = false) PersonalBookSortBy sortBy,
+            @Parameter(description = "정렬 방향 (DESC | ASC)", example = "DESC")
+            @RequestParam(required = false) PersonalBookSortOrder sortOrder,
+            @Parameter(description = "별점 하한 (포함, 0.0~5.0)", example = "3.0")
+            @RequestParam(required = false) BigDecimal minRating,
+            @Parameter(description = "별점 상한 (포함, 0.0~5.0)", example = "4.5")
+            @RequestParam(required = false) BigDecimal maxRating,
+            @Parameter(description = "커서 - 마지막 아이템 rating (RATING 정렬 시 사용, null 가능)", example = "4.5")
+            @RequestParam(required = false) BigDecimal cursorRating,
             @Parameter(
                     description = "커서 - 마지막 아이템 addedAt (ISO 8601, cursorBookId와 함께 전달)"
             )
@@ -526,6 +555,105 @@ public interface BookApi {
     );
 
     @Operation(
+            summary = "내 책장에서 책 일괄 삭제 (developer: 권우희)",
+            description = """
+                    내 책장에 등록된 책 여러 권을 한 번에 삭제합니다.
+                    - 로그인한 사용자 소유의 책만 삭제할 수 있습니다.
+                    - 요청 본문의 bookIds 배열에 삭제할 book ID 목록을 전달합니다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "책 일괄 삭제 성공",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = Void.class),
+                            examples = @io.swagger.v3.oas.annotations.media.ExampleObject(
+                                    value = """
+                                            {
+                                              "code": "DELETED",
+                                              "message": "책 일괄 삭제 성공",
+                                              "data": null
+                                            }
+                                            """
+                            ))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400",
+                    description = "잘못된 요청",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiResponse.class),
+                            examples = @io.swagger.v3.oas.annotations.media.ExampleObject(
+                                    value = """
+                                            {
+                                              "code": "G002",
+                                              "message": "입력값이 올바르지 않습니다.",
+                                              "data": null
+                                            }
+                                            """
+                            )
+                    )
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401",
+                    description = "인증 실패 - 로그인이 필요합니다.",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiResponse.class),
+                            examples = @io.swagger.v3.oas.annotations.media.ExampleObject(
+                                    value = """
+                                            {
+                                              "code": "G102",
+                                              "message": "인증이 필요합니다.",
+                                              "data": null
+                                            }
+                                            """
+                            )
+                    )
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "책을 찾을 수 없음",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiResponse.class),
+                            examples = @io.swagger.v3.oas.annotations.media.ExampleObject(
+                                    value = """
+                                            {
+                                              "code": "B003",
+                                              "message": "책장에 해당 책이 존재하지 않습니다.",
+                                              "data": null
+                                            }
+                                            """
+                            )
+                    )
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "500",
+                    description = "서버 오류",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiResponse.class),
+                            examples = @io.swagger.v3.oas.annotations.media.ExampleObject(
+                                    value = """
+                                            {
+                                              "code": "E000",
+                                              "message": "서버 에러가 발생했습니다. 담당자에게 문의 바랍니다.",
+                                              "data": null
+                                            }
+                                            """
+                            )
+                    )
+            )
+    })
+    @DeleteMapping
+    ResponseEntity<ApiResponse<Void>> deleteMyBooks(
+            @Parameter(description = "일괄 삭제할 책 ID 목록", required = true)
+            @Valid @RequestBody BookBulkDeleteRequest request
+    );
+
+    @Operation(
             summary = "읽고 있는 책 목록 조회 (developer: 권우희)",
             description = """
                     읽고 있는 책(READING 상태)만 조회합니다.
@@ -553,7 +681,13 @@ public interface BookApi {
                                                     "authors": "저자A, 저자B",
                                                     "bookReadingStatus": "READING",
                                                     "thumbnail": "https://example.com/thumb.jpg",
-                                                    "gatheringName": "예제 모임"
+                                                    "rating": 4.0,
+                                                    "gatherings": [
+                                                      {
+                                                        "gatheringId": 10,
+                                                        "gatheringName": "예제 모임"
+                                                      }
+                                                    ]
                                                   }
                                                 ],
                                                 "totalCount": 1,

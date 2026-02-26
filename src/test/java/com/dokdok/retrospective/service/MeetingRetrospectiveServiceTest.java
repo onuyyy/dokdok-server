@@ -26,7 +26,6 @@ import com.dokdok.topic.entity.TopicAnswer;
 import com.dokdok.topic.entity.TopicStatus;
 import com.dokdok.topic.repository.TopicAnswerRepository;
 import com.dokdok.topic.repository.TopicRepository;
-import com.dokdok.topic.service.TopicValidator;
 import com.dokdok.user.entity.User;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -72,9 +71,6 @@ class MeetingRetrospectiveServiceTest {
 	@Mock
 	private MeetingValidator meetingValidator;
 
-	@Mock
-	private TopicValidator topicValidator;
-
 	@Test
 	@DisplayName("약속이 없으면 예외가 발생한다")
 	void getMeetingRetrospective_throwsWhenMeetingNotFound() {
@@ -101,7 +97,11 @@ class MeetingRetrospectiveServiceTest {
 		Long gatheringId = 1L;
 
 		Gathering gathering = Gathering.builder().id(gatheringId).build();
-		Meeting meeting = Meeting.builder().id(meetingId).gathering(gathering).build();
+		Meeting meeting = Meeting.builder()
+				.id(meetingId)
+				.gathering(gathering)
+				.retrospectivePublished(true)
+				.build();
 
 		try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
 			securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
@@ -124,7 +124,11 @@ class MeetingRetrospectiveServiceTest {
 		Long gatheringId = 1L;
 
 		Gathering gathering = Gathering.builder().id(gatheringId).build();
-		Meeting meeting = Meeting.builder().id(meetingId).gathering(gathering).build();
+		Meeting meeting = Meeting.builder()
+				.id(meetingId)
+				.gathering(gathering)
+				.retrospectivePublished(true)
+				.build();
 
 		try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
 			securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
@@ -140,8 +144,8 @@ class MeetingRetrospectiveServiceTest {
 	}
 
 	@Test
-	@DisplayName("코멘트가 없어도 정상적으로 조회한다")
-	void getMeetingRetrospective_withNoComments_success() {
+	@DisplayName("퍼블리시되지 않은 약속 회고 조회 시 예외가 발생한다")
+	void getMeetingRetrospective_throwsWhenNotPublished() {
 		Long meetingId = 1L;
 		Long userId = 1L;
 		Long gatheringId = 1L;
@@ -150,9 +154,37 @@ class MeetingRetrospectiveServiceTest {
 		Meeting meeting = Meeting.builder()
 				.id(meetingId)
 				.gathering(gathering)
+				.retrospectivePublished(false)
+				.build();
+
+		try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
+			securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
+
+			when(meetingValidator.findMeetingOrThrow(meetingId)).thenReturn(meeting);
+
+			assertThatThrownBy(() -> meetingRetrospectiveService.getMeetingRetrospective(meetingId))
+					.isInstanceOf(RetrospectiveException.class)
+					.hasFieldOrPropertyWithValue("errorCode", RetrospectiveErrorCode.RETROSPECTIVE_NOT_PUBLISHED);
+		}
+	}
+
+	@Test
+	@DisplayName("코멘트가 없어도 정상적으로 조회한다")
+	void getMeetingRetrospective_withNoComments_success() {
+		Long meetingId = 1L;
+		Long userId = 1L;
+		Long gatheringId = 1L;
+
+		User leader = User.builder().id(userId).nickname("리더").build();
+		Gathering gathering = Gathering.builder().id(gatheringId).build();
+		Meeting meeting = Meeting.builder()
+				.id(meetingId)
+				.gathering(gathering)
+				.meetingLeader(leader)
 				.meetingName("모임")
 				.meetingStartDate(LocalDateTime.of(2026, 1, 15, 19, 0))
 				.meetingEndDate(LocalDateTime.of(2026, 1, 15, 21, 0))
+				.retrospectivePublished(true)
 				.build();
 
 		Topic topic = Topic.builder().id(1L).meeting(meeting).title("토픽1").build();
@@ -185,26 +217,60 @@ class MeetingRetrospectiveServiceTest {
 	}
 
 	@Test
+	@DisplayName("퍼블리시되지 않은 약속에 코멘트 작성 시 예외가 발생한다")
+	void createMeetingRetrospective_throwsWhenNotPublished() {
+		Long meetingId = 1L;
+		Long userId = 1L;
+		Long gatheringId = 1L;
+
+		Gathering gathering = Gathering.builder().id(gatheringId).build();
+		Meeting meeting = Meeting.builder()
+				.id(meetingId)
+				.gathering(gathering)
+				.retrospectivePublished(false)
+				.build();
+		User user = User.builder().id(userId).build();
+		MeetingRetrospectiveRequest request = new MeetingRetrospectiveRequest("코멘트");
+
+		CustomOAuth2User customOAuth2User = mock(CustomOAuth2User.class);
+		when(customOAuth2User.getUser()).thenReturn(user);
+
+		try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
+			securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
+			securityUtilMock.when(SecurityUtil::getCurrentUser).thenReturn(customOAuth2User);
+
+			when(meetingValidator.findMeetingOrThrow(meetingId)).thenReturn(meeting);
+
+			assertThatThrownBy(() -> meetingRetrospectiveService.createMeetingRetrospective(meetingId, request))
+					.isInstanceOf(RetrospectiveException.class)
+					.hasFieldOrPropertyWithValue("errorCode", RetrospectiveErrorCode.RETROSPECTIVE_NOT_PUBLISHED);
+
+			verify(retrospectiveRepository, never()).save(any());
+		}
+	}
+
+	@Test
 	@DisplayName("공동 회고를 정상적으로 작성한다")
 	void createMeetingRetrospective_success() {
 		// given
 		Long meetingId = 1L;
 		Long userId = 1L;
-		Long topicId = 1L;
 		Long gatheringId = 1L;
 
 		Gathering gathering = Gathering.builder().id(gatheringId).build();
-		Meeting meeting = Meeting.builder().id(meetingId).gathering(gathering).build();
+		Meeting meeting = Meeting.builder()
+				.id(meetingId)
+				.gathering(gathering)
+				.retrospectivePublished(true)
+				.build();
 		User user = User.builder().id(userId).nickname("사용자1").profileImageUrl("https://image.jpg").build();
-		Topic topic = Topic.builder().id(topicId).meeting(meeting).title("토픽1").build();
 
-		MeetingRetrospectiveRequest request = new MeetingRetrospectiveRequest(topicId, "회고 코멘트입니다.");
+		MeetingRetrospectiveRequest request = new MeetingRetrospectiveRequest("회고 코멘트입니다.");
 
 		MeetingRetrospective saved = MeetingRetrospective.builder()
 				.id(1L)
 				.meeting(meeting)
 				.createdBy(user)
-				.topic(topic)
 				.comment("회고 코멘트입니다.")
 				.build();
 
@@ -217,7 +283,6 @@ class MeetingRetrospectiveServiceTest {
 
 			when(meetingValidator.findMeetingOrThrow(meetingId)).thenReturn(meeting);
 			doNothing().when(retrospectiveValidator).validateMeetingRetrospectiveAccess(gatheringId, meetingId, userId);
-			when(topicValidator.getTopicInMeeting(topicId, meetingId)).thenReturn(topic);
 			when(retrospectiveRepository.save(any(MeetingRetrospective.class))).thenReturn(saved);
 			when(storageService.getPresignedProfileImage("https://image.jpg")).thenReturn("https://image.jpg");
 
@@ -226,13 +291,12 @@ class MeetingRetrospectiveServiceTest {
 					meetingRetrospectiveService.createMeetingRetrospective(meetingId, request);
 
 			// then
-			assertThat(response.meetingRetrospectiveId()).isEqualTo(1L);
+			assertThat(response.commentId()).isEqualTo(1L);
 			assertThat(response.userId()).isEqualTo(userId);
 			assertThat(response.comment()).isEqualTo("회고 코멘트입니다.");
 
 			verify(meetingValidator).findMeetingOrThrow(meetingId);
 			verify(retrospectiveValidator).validateMeetingRetrospectiveAccess(gatheringId, meetingId, userId);
-			verify(topicValidator).getTopicInMeeting(topicId, meetingId);
 			verify(retrospectiveRepository).save(any(MeetingRetrospective.class));
 		}
 	}
@@ -243,7 +307,7 @@ class MeetingRetrospectiveServiceTest {
 		Long meetingId = 999L;
 		Long userId = 1L;
 		User user = User.builder().id(userId).build();
-		MeetingRetrospectiveRequest request = new MeetingRetrospectiveRequest(1L, "코멘트");
+		MeetingRetrospectiveRequest request = new MeetingRetrospectiveRequest("코멘트");
 
 		CustomOAuth2User customOAuth2User = mock(CustomOAuth2User.class);
 		when(customOAuth2User.getUser()).thenReturn(user);
@@ -271,9 +335,13 @@ class MeetingRetrospectiveServiceTest {
 		Long gatheringId = 1L;
 
 		Gathering gathering = Gathering.builder().id(gatheringId).build();
-		Meeting meeting = Meeting.builder().id(meetingId).gathering(gathering).build();
+		Meeting meeting = Meeting.builder()
+				.id(meetingId)
+				.gathering(gathering)
+				.retrospectivePublished(true)
+				.build();
 		User user = User.builder().id(userId).build();
-		MeetingRetrospectiveRequest request = new MeetingRetrospectiveRequest(1L, "코멘트");
+		MeetingRetrospectiveRequest request = new MeetingRetrospectiveRequest( "코멘트");
 
 		CustomOAuth2User customOAuth2User = mock(CustomOAuth2User.class);
 		when(customOAuth2User.getUser()).thenReturn(user);
@@ -298,14 +366,14 @@ class MeetingRetrospectiveServiceTest {
 	@DisplayName("공동 회고 삭제를 정상적으로 수행한다")
 	void deleteMeetingRetrospective_success() {
 		Long meetingId = 1L;
-		Long retrospectiveId = 10L;
+		Long commentId = 10L;
 		Long userId = 1L;
 
 		Gathering gathering = Gathering.builder().id(1L).build();
 		Meeting meeting = Meeting.builder().id(meetingId).gathering(gathering).build();
 		User user = User.builder().id(userId).build();
 		MeetingRetrospective retrospective = MeetingRetrospective.builder()
-				.id(retrospectiveId)
+				.id(commentId)
 				.meeting(meeting)
 				.createdBy(user)
 				.build();
@@ -313,12 +381,12 @@ class MeetingRetrospectiveServiceTest {
 		try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
 			securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
 
-			when(retrospectiveRepository.findByIdAndMeetingId(retrospectiveId, meetingId))
+			when(retrospectiveRepository.findByIdAndMeetingId(commentId, meetingId))
 					.thenReturn(Optional.of(retrospective));
 			doNothing().when(retrospectiveValidator)
 					.validateMeetingRetrospectiveDeletePermission(retrospective, userId);
 
-			meetingRetrospectiveService.deleteMeetingRetrospective(meetingId, retrospectiveId);
+			meetingRetrospectiveService.deleteMeetingRetrospective(meetingId, commentId);
 
 			verify(retrospectiveRepository).delete(retrospective);
 		}
@@ -328,16 +396,16 @@ class MeetingRetrospectiveServiceTest {
 	@DisplayName("공동 회고가 없으면 삭제 시 예외가 발생한다")
 	void deleteMeetingRetrospective_throwsWhenNotFound() {
 		Long meetingId = 1L;
-		Long retrospectiveId = 10L;
+		Long commentId = 10L;
 		Long userId = 1L;
 
 		try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
 			securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
 
-			when(retrospectiveRepository.findByIdAndMeetingId(retrospectiveId, meetingId))
+			when(retrospectiveRepository.findByIdAndMeetingId(commentId, meetingId))
 					.thenReturn(Optional.empty());
 
-			assertThatThrownBy(() -> meetingRetrospectiveService.deleteMeetingRetrospective(meetingId, retrospectiveId))
+			assertThatThrownBy(() -> meetingRetrospectiveService.deleteMeetingRetrospective(meetingId, commentId))
 					.isInstanceOf(RetrospectiveException.class)
 					.hasFieldOrPropertyWithValue("errorCode", RetrospectiveErrorCode.MEETING_RETROSPECTIVE_NOT_FOUND);
 
@@ -349,14 +417,14 @@ class MeetingRetrospectiveServiceTest {
 	@DisplayName("공동 회고 삭제 권한이 없으면 예외가 발생한다")
 	void deleteMeetingRetrospective_throwsWhenForbidden() {
 		Long meetingId = 1L;
-		Long retrospectiveId = 10L;
+		Long commentId = 10L;
 		Long userId = 2L;
 
 		Gathering gathering = Gathering.builder().id(1L).build();
 		Meeting meeting = Meeting.builder().id(meetingId).gathering(gathering).build();
 		User user = User.builder().id(1L).build();
 		MeetingRetrospective retrospective = MeetingRetrospective.builder()
-				.id(retrospectiveId)
+				.id(commentId)
 				.meeting(meeting)
 				.createdBy(user)
 				.build();
@@ -364,12 +432,12 @@ class MeetingRetrospectiveServiceTest {
 		try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
 			securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
 
-			when(retrospectiveRepository.findByIdAndMeetingId(retrospectiveId, meetingId))
+			when(retrospectiveRepository.findByIdAndMeetingId(commentId, meetingId))
 					.thenReturn(Optional.of(retrospective));
 			doThrow(new GatheringException(GatheringErrorCode.NOT_GATHERING_LEADER))
 					.when(retrospectiveValidator).validateMeetingRetrospectiveDeletePermission(retrospective, userId);
 
-			assertThatThrownBy(() -> meetingRetrospectiveService.deleteMeetingRetrospective(meetingId, retrospectiveId))
+			assertThatThrownBy(() -> meetingRetrospectiveService.deleteMeetingRetrospective(meetingId, commentId))
 					.isInstanceOf(GatheringException.class)
 					.hasFieldOrPropertyWithValue("errorCode", GatheringErrorCode.NOT_GATHERING_LEADER);
 

@@ -99,3 +99,7 @@ ai:
   api:
     base-url: http://localhost:8000
     summary-path: /summaries/topics
+    stt-path: /stt/summary
+
+stt:
+  temp-dir: ${STT_TEMP_DIR:}

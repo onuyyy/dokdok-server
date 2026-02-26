@@ -25,11 +25,15 @@ import com.dokdok.meeting.exception.MeetingErrorCode;
 import com.dokdok.meeting.exception.MeetingException;
 import com.dokdok.meeting.repository.MeetingMemberRepository;
 import com.dokdok.meeting.repository.MeetingRepository;
+import com.dokdok.retrospective.repository.PersonalRetrospectiveRepository;
+import com.dokdok.retrospective.repository.TopicRetrospectiveSummaryRepository;
 import com.dokdok.topic.entity.Topic;
 import com.dokdok.topic.entity.TopicStatus;
 import com.dokdok.topic.entity.TopicType;
 import com.dokdok.topic.repository.TopicAnswerRepository;
 import com.dokdok.topic.repository.TopicRepository;
+import com.dokdok.topic.service.TopicService;
+import com.dokdok.storage.service.StorageService;
 import com.dokdok.user.entity.User;
 import com.dokdok.user.service.UserValidator;
 import lombok.RequiredArgsConstructor;
@@ -50,6 +54,8 @@ public class MeetingService {
     private final MeetingMemberRepository meetingMemberRepository;
     private final TopicRepository topicRepository;
     private final TopicAnswerRepository topicAnswerRepository;
+    private final TopicService topicService;
+    private final StorageService storageService;
     private final GatheringRepository gatheringRepository;
     private final GatheringMemberRepository gatheringMemberRepository;
     private final GatheringValidator gatheringValidator;
@@ -58,6 +64,8 @@ public class MeetingService {
     private final BookValidator bookValidator;
     private final UserValidator userValidator;
     private final PersonalBookService personalBookService;
+    private final TopicRetrospectiveSummaryRepository topicRetrospectiveSummaryRepository;
+    private final PersonalRetrospectiveRepository personalRetrospectiveRepository;
 
     /**
      * 특정 약속의 정보를 확인할 수 있다. 모임에 속한 사용자만 조회 가능
@@ -74,6 +82,7 @@ public class MeetingService {
         gatheringValidator.validateMembership(meeting.getGathering().getId(), userId);
 
         List<MeetingMember> meetingMembers = meetingMemberRepository.findAllByMeetingId(meetingId);
+        Map<Long, String> profileImageUrlMap = buildProfileImageUrlMap(meetingMembers);
 
         LocalDateTime confirmedTopicDate = topicRepository.findConfirmedTopicDateByMeetingId(
                 meetingId,
@@ -81,13 +90,65 @@ public class MeetingService {
         );
         boolean confirmedTopic = confirmedTopicDate != null;
 
+        MeetingRetrospectiveStatus retrospectiveStatus = resolveMeetingRetrospectiveStatus(meetingId, meeting);
+
+        // 개인 회고 작성 여부
+        boolean personalRetrospectiveWritten = personalRetrospectiveRepository
+                .existsByMeetingIdAndUserId(meetingId, userId);
+
         return MeetingDetailResponse.from(
                 meeting,
                 meetingMembers,
                 userId,
                 confirmedTopic,
-                confirmedTopicDate
+                confirmedTopicDate,
+                retrospectiveStatus,
+                personalRetrospectiveWritten,
+                profileImageUrlMap
         );
+    }
+
+    /**
+     * 약속 회고 상태를 계산한다: FINAL_PUBLISHED > AI_SUMMARY_COMPLETED > NOT_CREATED 순으로 판단.
+     *   - FINAL_PUBLISHED: meeting.isRetrospectivePublished()가 true
+     *   - AI_SUMMARY_COMPLETED: 확정 토픽이 있고, 해당 토픽 중 하나라도 TopicRetrospectiveSummary가 존재
+     *   - NOT_CREATED: 위 두 조건 모두 불충족
+     **/
+    private MeetingRetrospectiveStatus resolveMeetingRetrospectiveStatus(Long meetingId, Meeting meeting) {
+        if (meeting.isRetrospectivePublished()) {
+            return MeetingRetrospectiveStatus.FINAL_PUBLISHED;
+        }
+
+        List<Long> topicIds = topicRepository.findConfirmedTopics(meetingId).stream()
+                .map(Topic::getId)
+                .toList();
+        if (topicIds.isEmpty()) {
+            return MeetingRetrospectiveStatus.NOT_CREATED;
+        }
+
+        boolean hasSummary = !topicRetrospectiveSummaryRepository.findAllByTopicIdIn(topicIds).isEmpty();
+        return hasSummary
+                ? MeetingRetrospectiveStatus.AI_SUMMARY_COMPLETED
+                : MeetingRetrospectiveStatus.NOT_CREATED;
+    }
+
+    /**
+     * 약속 멤버들의 프로필 이미지 presigned URL Map 생성
+     */
+    private Map<Long, String> buildProfileImageUrlMap(List<MeetingMember> members) {
+        Map<Long, String> profileImageUrlMap = new HashMap<>();
+
+        members.forEach(member -> {
+            User user = member.getUser();
+            if (user == null || user.getId() == null) {
+                return;
+            }
+            String profileImageUrl = user.getProfileImageUrl();
+            String presignedUrl = storageService.getPresignedProfileImage(profileImageUrl);
+            profileImageUrlMap.put(user.getId(), presignedUrl);
+        });
+
+        return profileImageUrlMap;
     }
 
     /**
@@ -155,6 +216,7 @@ public class MeetingService {
 
         meeting.changeStatus(MeetingStatus.CONFIRMED);
         saveMeetingBookForUser(meeting, meeting.getGathering(), meeting.getMeetingLeader().getId());
+        topicService.createDefaultTopic(meeting);
 
         return MeetingStatusResponse.from(meeting);
     }
@@ -203,11 +265,22 @@ public class MeetingService {
      */
     private void validateConfirmable(Meeting meeting) {
         Long gatheringId = meeting.getGathering().getId();
-        boolean hasConfirmedMeeting = meetingRepository
-                .existsByGatheringIdAndMeetingStatus(gatheringId, MeetingStatus.CONFIRMED);
-        if (hasConfirmedMeeting) {
+        LocalDateTime startDate = meeting.getMeetingStartDate();
+        LocalDateTime endDate = meeting.getMeetingEndDate();
+        if (startDate == null || endDate == null) {
+            throw new MeetingException(MeetingErrorCode.MEETING_DATE_REQUIRED,
+                    "약속 시작/종료 일시는 필수입니다.");
+        }
+        boolean hasOverlappingMeeting = meetingRepository.existsOverlappingMeeting(
+                gatheringId,
+                MeetingStatus.CONFIRMED,
+                meeting.getId(),
+                startDate,
+                endDate
+        );
+        if (hasOverlappingMeeting) {
             throw new MeetingException(MeetingErrorCode.INVALID_MEETING_STATUS_CHANGE,
-                    "이미 확정된 약속이 존재합니다.");
+                    "동일 시간에 확정된 약속이 존재합니다.");
         }
     }
 
@@ -629,7 +702,7 @@ public class MeetingService {
                     cursorMeetingId(cursor),
                     pageable
             );
-            case DONE -> meetingMemberRepository.findMyMeetingsByStatusAfterCursor(
+            case DONE -> meetingMemberRepository.findMyDoneMeetingsWithoutPersonalRetrospectiveAfterCursor(
                     userId,
                     MeetingStatus.DONE,
                     cursorStartDateTime(cursor),
@@ -654,7 +727,7 @@ public class MeetingService {
                         now,
                         now.plusDays(3)
                 );
-                case DONE -> meetingMemberRepository.countMyMeetingsByStatus(
+                case DONE -> meetingMemberRepository.countMyMeetingsByStatusWithoutPersonalRetrospective(
                         userId,
                         MeetingStatus.DONE
                 );
@@ -687,7 +760,7 @@ public class MeetingService {
                 now,
                 now.plusDays(3)
         );
-        int doneCount = meetingMemberRepository.countMyMeetingsByStatus(
+        int doneCount = meetingMemberRepository.countMyMeetingsByStatusWithoutPersonalRetrospective(
                 userId,
                 MeetingStatus.DONE
         );
@@ -862,6 +935,13 @@ public class MeetingService {
         LocalDateTime now = LocalDateTime.now();
         List<MyMeetingListItemResponse> items = new ArrayList<>();
 
+        List<Long> meetingIds = meetings.stream()
+                .map(Meeting::getId)
+                .toList();
+        Set<Long> meetingIdsWithConfirmedTopics = new HashSet<>(
+                topicRepository.findMeetingIdsWithConfirmedTopics(meetingIds)
+        );
+
         for (Meeting meeting : meetings) {
             MeetingProgressStatus progressStatus = resolveProgressStatus(
                     meeting.getMeetingStartDate(),
@@ -869,6 +949,7 @@ public class MeetingService {
                     now
             );
             MeetingMyRole myRole = resolveMyMeetingRole(meeting, userId);
+            boolean preOpinionTemplateConfirmed = meetingIdsWithConfirmedTopics.contains(meeting.getId());
 
             items.add(new MyMeetingListItemResponse(
                     meeting.getId(),
@@ -881,7 +962,8 @@ public class MeetingService {
                     meeting.getMeetingEndDate(),
                     meeting.getMeetingStatus(),
                     myRole,
-                    progressStatus
+                    progressStatus,
+                    preOpinionTemplateConfirmed
             ));
         }
         return items;

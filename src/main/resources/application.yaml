@@ -27,3 +27,7 @@ ai:
   api:
     base-url: ${AI_API_BASE_URL:http://localhost:8000}
     summary-path: ${AI_API_SUMMARY_PATH:/summaries/topics}
+    stt-path: ${AI_API_STT_PATH:/stt/summary}
+
+stt:
+  temp-dir: ${STT_TEMP_DIR:}

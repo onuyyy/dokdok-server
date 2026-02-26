@@ -17,10 +17,10 @@ public record ReadingTimelineItem(
         Long sourceId,
         @Schema(description = "독서 기록 데이터 (type=READING_RECORD)")
         PersonalReadingRecordListResponse readingRecord,
-        @Schema(description = "개인 회고 데이터 (type=PERSONAL_RETROSPECTIVE)")
+        @Schema(description = "회고 데이터 (type=PERSONAL_RETROSPECTIVE | GROUP_RETROSPECTIVE)")
         RetrospectiveRecordResponse retrospective,
         @Schema(description = "사전 의견 데이터 (type=PRE_OPINION)")
-        PersonalReadingTopicAnswerResponse preOpinion
+        ReadingTimelinePreOpinionResponse preOpinion
 ) {
     public static ReadingTimelineItem readingRecord(
             LocalDateTime eventAt,
@@ -52,10 +52,25 @@ public record ReadingTimelineItem(
         );
     }
 
+    public static ReadingTimelineItem groupRetrospective(
+            LocalDateTime eventAt,
+            Long sourceId,
+            RetrospectiveRecordResponse retrospective
+    ) {
+        return new ReadingTimelineItem(
+                ReadingTimelineType.GROUP_RETROSPECTIVE,
+                eventAt,
+                sourceId,
+                null,
+                retrospective,
+                null
+        );
+    }
+
     public static ReadingTimelineItem preOpinion(
             LocalDateTime eventAt,
             Long sourceId,
-            PersonalReadingTopicAnswerResponse preOpinion
+            ReadingTimelinePreOpinionResponse preOpinion
     ) {
         return new ReadingTimelineItem(
                 ReadingTimelineType.PRE_OPINION,

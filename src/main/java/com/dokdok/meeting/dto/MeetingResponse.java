@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 @Schema(description = "약속 응답")
 public record MeetingResponse(
@@ -52,7 +53,7 @@ public record MeetingResponse(
                 BookInfo.from(meeting.getBook()),
                 ScheduleInfo.from(meeting.getMeetingStartDate(), meeting.getMeetingEndDate()),
                 MeetingLocationDto.from(meeting.getLocation()),
-                ParticipantsInfo.from(safeMembers, meeting.getMaxParticipants())
+                ParticipantsInfo.from(safeMembers, meeting.getMaxParticipants(), null)
         );
     }
 
@@ -126,10 +127,14 @@ public record MeetingResponse(
             @Schema(description = "참가자 목록")
             List<MemberInfo> members
     ) {
-        public static ParticipantsInfo from(List<MeetingMember> meetingMembers, Integer maxCount) {
+        public static ParticipantsInfo from(
+                List<MeetingMember> meetingMembers,
+                Integer maxCount,
+                Map<Long, String> profileImageUrlMap
+        ) {
             List<MemberInfo> members = meetingMembers.stream()
                     .filter(member -> member.getCanceledAt() == null)
-                    .map(MemberInfo::from)
+                    .map(member -> MemberInfo.from(member, profileImageUrlMap))
                     .toList();
 
             return new ParticipantsInfo(members.size(), maxCount, members);
@@ -147,9 +152,21 @@ public record MeetingResponse(
             @Schema(description = "프로필 이미지 URL", example = "https://example.com/profile.jpg")
             String profileImageUrl
     ) {
-        public static MemberInfo from(MeetingMember meetingMember) {
+        public static MemberInfo from(MeetingMember meetingMember, Map<Long, String> profileImageUrlMap) {
             User user = meetingMember.getUser();
-            return new MemberInfo(user.getId(), user.getNickname(), user.getProfileImageUrl());
+            String profileImageUrl = resolveProfileImageUrl(user, profileImageUrlMap);
+            return new MemberInfo(user.getId(), user.getNickname(), profileImageUrl);
         }
+    }
+
+    private static String resolveProfileImageUrl(User user, Map<Long, String> profileImageUrlMap) {
+        if (user == null) {
+            return null;
+        }
+        if (profileImageUrlMap == null) {
+            return user.getProfileImageUrl();
+        }
+        String presignedUrl = profileImageUrlMap.get(user.getId());
+        return presignedUrl != null ? presignedUrl : user.getProfileImageUrl();
     }
 }

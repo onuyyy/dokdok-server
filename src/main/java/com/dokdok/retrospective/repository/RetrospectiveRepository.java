@@ -18,26 +18,26 @@ public interface RetrospectiveRepository extends JpaRepository<MeetingRetrospect
 
     @Query("SELECT mr FROM MeetingRetrospective mr " +
             "JOIN FETCH mr.createdBy " +
-            "WHERE mr.topic.id = :topicId " +
+            "WHERE mr.meeting.id = :meetingId " +
             "ORDER BY mr.createdAt DESC, mr.id DESC")
-    List<MeetingRetrospective> findByTopicIdFirstPage(
-            @Param("topicId") Long topicId,
+    List<MeetingRetrospective> findByMeetingIdFirstPage(
+            @Param("meetingId") Long meetingId,
             Pageable pageable
     );
 
     @Query("SELECT mr FROM MeetingRetrospective mr " +
             "JOIN FETCH mr.createdBy " +
-            "WHERE mr.topic.id = :topicId " +
+            "WHERE mr.meeting.id = :meetingId " +
             "AND (mr.createdAt < :cursorCreatedAt " +
             "     OR (mr.createdAt = :cursorCreatedAt AND mr.id < :cursorCommentId)) " +
             "ORDER BY mr.createdAt DESC, mr.id DESC")
-    List<MeetingRetrospective> findByTopicIdAfterCursor(
-            @Param("topicId") Long topicId,
+    List<MeetingRetrospective> findByMeetingIdAfterCursor(
+            @Param("meetingId") Long meetingId,
             @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
             @Param("cursorCommentId") Long cursorCommentId,
             Pageable pageable
     );
 
-    @Query("SELECT COUNT(mr) FROM MeetingRetrospective mr WHERE mr.topic.id = :topicId")
-    int countByTopicId(@Param("topicId") Long topicId);
+    @Query("SELECT COUNT(mr) FROM MeetingRetrospective mr WHERE mr.meeting.id = :meetingId")
+    int countByMeetingId(@Param("meetingId") Long meetingId);
 }
