@@ -1335,7 +1335,8 @@ class PersonalRetrospectiveServiceTest {
                     .thenReturn(List.of());
 
             RetrospectiveRecordResponse recordResponse = RetrospectiveRecordResponse.of(
-                    retrospectiveId, "테스트 모임", ReflectionRecordType.PERSONAL_RETROSPECTIVE, null, List.of(), List.of()
+                    retrospectiveId, gathering.getId(), gathering.getGatheringName(), meeting.getId(),
+                    ReflectionRecordType.PERSONAL_RETROSPECTIVE, null, List.of(), List.of()
             );
             when(assembler.assembleRecords(any(), any(), any(), any()))
                     .thenReturn(List.of(recordResponse));

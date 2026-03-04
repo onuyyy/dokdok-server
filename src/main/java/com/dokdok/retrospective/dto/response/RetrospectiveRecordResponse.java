@@ -13,8 +13,12 @@ import java.util.List;
 public record RetrospectiveRecordResponse(
         @Schema(description = "개인 회고 ID", example = "1")
         Long retrospectiveId,
+        @Schema(description = "모임 ID", example = "1")
+        Long gatheringId,
         @Schema(description = "모임 이름", example = "독서 모임")
         String gatheringName,
+        @Schema(description = "약속 ID", example = "1")
+        Long meetingId,
         @Schema(description = "기록 유형", example = "개인 회고")
         ReflectionRecordType recordType,
         @Schema(description = "작성 일시", example = "2025-02-01T16:30:00")
@@ -91,7 +95,9 @@ public record RetrospectiveRecordResponse(
 
     public static RetrospectiveRecordResponse of(
             Long retrospectiveId,
+            Long gatheringId,
             String gatheringName,
+            Long meetingId,
             ReflectionRecordType recordType,
             LocalDateTime createdAt,
             List<TopicGroup> topicGroups,
@@ -99,7 +105,9 @@ public record RetrospectiveRecordResponse(
     ) {
         return new RetrospectiveRecordResponse(
                 retrospectiveId,
+                gatheringId,
                 gatheringName,
+                meetingId,
                 recordType,
                 createdAt,
                 topicGroups,

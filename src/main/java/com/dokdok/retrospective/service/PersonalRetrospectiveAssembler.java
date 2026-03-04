@@ -156,7 +156,9 @@ public class PersonalRetrospectiveAssembler {
 
                     return RetrospectiveRecordResponse.of(
                             retroId,
+                            retrospective.getMeeting().getGathering().getId(),
                             retrospective.getMeeting().getGathering().getGatheringName(),
+                            retrospective.getMeeting().getId(),
                             PERSONAL_RETROSPECTIVE,
                             retrospective.getCreatedAt(),
                             topicGroups,

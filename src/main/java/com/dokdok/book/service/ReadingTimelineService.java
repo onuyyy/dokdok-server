@@ -121,7 +121,7 @@ public class ReadingTimelineService {
         Map<Long, PersonalReadingRecordListResponse> readingRecordMap =
                 fetchReadingRecords(readingRecordIds, personalBookId, userId);
         Map<Long, RetrospectiveRecordResponse> retrospectiveMap =
-                fetchRetrospectives(retrospectiveIds, userId);
+                fetchPersonalRetrospectives(retrospectiveIds, userId);
         Map<Long, RetrospectiveRecordResponse> groupRetrospectiveMap =
                 fetchGroupRetrospectives(groupRetrospectiveMeetingIds);
         Map<Long, ReadingTimelinePreOpinionResponse> preOpinionMap =
@@ -187,82 +187,84 @@ public class ReadingTimelineService {
         return map;
     }
 
-    private Map<Long, RetrospectiveRecordResponse> fetchRetrospectives(
-            List<Long> retrospectiveIds,
-            Long userId
-    ) {
-        if (retrospectiveIds.isEmpty()) {
-            return Map.of();
-        }
-
-        List<PersonalMeetingRetrospective> retrospectives =
-                personalRetrospectiveRepository.findByIdsWithMeeting(retrospectiveIds, userId);
-
-        if (retrospectives.isEmpty()) {
-            return Map.of();
-        }
-
-        List<Long> ids = retrospectives.stream()
-                .map(PersonalMeetingRetrospective::getId)
-                .toList();
-
-        Map<Long, List<ChangedThoughtProjection>> changedThoughtsMap =
-                changedThoughtRepository.findByRetrospectiveIds(ids)
-                        .stream()
-                        .collect(groupingBy(ChangedThoughtProjection::retrospectiveId));
-
-        Map<Long, List<OtherPerspectiveProjection>> othersPerspectivesMap =
-                othersPerspectiveRepository.findByRetrospectiveIds(ids)
-                        .stream()
-                        .collect(groupingBy(OtherPerspectiveProjection::retrospectiveId));
-
-        Map<Long, List<FreeTextProjection>> freeTextsMap =
-                freeTextRepository.findByRetrospectiveIds(ids)
-                        .stream()
-                        .collect(groupingBy(FreeTextProjection::retrospectiveId));
-
-        List<RetrospectiveRecordResponse> responses = personalRetrospectiveAssembler.assembleRecords(
-                retrospectives,
-                changedThoughtsMap,
-                othersPerspectivesMap,
-                freeTextsMap
-        );
-
-        Map<Long, RetrospectiveRecordResponse> map = new HashMap<>();
-        for (RetrospectiveRecordResponse response : responses) {
-            map.put(response.retrospectiveId(), response);
-        }
-        return map;
-    }
-
-    private Map<Long, RetrospectiveRecordResponse> fetchGroupRetrospectives(List<Long> meetingIds) {
-        if (meetingIds.isEmpty()) {
-            return Map.of();
-        }
-
-        List<Meeting> meetings = meetingRepository.findByIdInWithGathering(meetingIds);
-        Map<Long, RetrospectiveRecordResponse> map = new HashMap<>();
-
-        for (Meeting meeting : meetings) {
-            if (!meeting.isRetrospectivePublished() || meeting.getRetrospectivePublishedAt() == null) {
-                continue;
+        private Map<Long, RetrospectiveRecordResponse> fetchPersonalRetrospectives(
+                List<Long> retrospectiveIds,
+                Long userId
+        ) {
+            if (retrospectiveIds.isEmpty()) {
+                return Map.of();
             }
 
-            map.put(
-                    meeting.getId(),
-                    RetrospectiveRecordResponse.of(
-                            meeting.getId(),
-                            meeting.getGathering().getGatheringName(),
-                            ReflectionRecordType.MEETING_RETROSPECTIVE,
-                            meeting.getRetrospectivePublishedAt(),
-                            List.of(),
-                            List.of()
-                    )
+            List<PersonalMeetingRetrospective> retrospectives =
+                    personalRetrospectiveRepository.findByIdsWithMeeting(retrospectiveIds, userId);
+
+            if (retrospectives.isEmpty()) {
+                return Map.of();
+            }
+
+            List<Long> ids = retrospectives.stream()
+                    .map(PersonalMeetingRetrospective::getId)
+                    .toList();
+
+            Map<Long, List<ChangedThoughtProjection>> changedThoughtsMap =
+                    changedThoughtRepository.findByRetrospectiveIds(ids)
+                            .stream()
+                            .collect(groupingBy(ChangedThoughtProjection::retrospectiveId));
+
+            Map<Long, List<OtherPerspectiveProjection>> othersPerspectivesMap =
+                    othersPerspectiveRepository.findByRetrospectiveIds(ids)
+                            .stream()
+                            .collect(groupingBy(OtherPerspectiveProjection::retrospectiveId));
+
+            Map<Long, List<FreeTextProjection>> freeTextsMap =
+                    freeTextRepository.findByRetrospectiveIds(ids)
+                            .stream()
+                            .collect(groupingBy(FreeTextProjection::retrospectiveId));
+
+            List<RetrospectiveRecordResponse> responses = personalRetrospectiveAssembler.assembleRecords(
+                    retrospectives,
+                    changedThoughtsMap,
+                    othersPerspectivesMap,
+                    freeTextsMap
             );
+
+            Map<Long, RetrospectiveRecordResponse> map = new HashMap<>();
+            for (RetrospectiveRecordResponse response : responses) {
+                map.put(response.retrospectiveId(), response);
+            }
+            return map;
         }
 
-        return map;
-    }
+        private Map<Long, RetrospectiveRecordResponse> fetchGroupRetrospectives(List<Long> meetingIds) {
+            if (meetingIds.isEmpty()) {
+                return Map.of();
+            }
+
+            List<Meeting> meetings = meetingRepository.findByIdInWithGathering(meetingIds);
+            Map<Long, RetrospectiveRecordResponse> map = new HashMap<>();
+
+            for (Meeting meeting : meetings) {
+                if (!meeting.isRetrospectivePublished() || meeting.getRetrospectivePublishedAt() == null) {
+                    continue;
+                }
+
+                map.put(
+                        meeting.getId(),
+                        RetrospectiveRecordResponse.of(
+                                meeting.getId(),
+                                meeting.getGathering().getId(),
+                                meeting.getGathering().getGatheringName(),
+                                meeting.getId(),
+                                ReflectionRecordType.MEETING_RETROSPECTIVE,
+                                meeting.getRetrospectivePublishedAt(),
+                                List.of(),
+                                List.of()
+                        )
+                );
+            }
+
+            return map;
+        }
 
     private Map<Long, ReadingTimelinePreOpinionResponse> fetchPreOpinions(
             List<Long> meetingIds,
