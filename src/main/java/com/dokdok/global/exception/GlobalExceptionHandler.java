@@ -1,9 +1,11 @@
 package com.dokdok.global.exception;
 
 import com.dokdok.global.response.ApiResponse;
-import tools.jackson.databind.exc.InvalidFormatException;
+import jakarta.servlet.http.HttpServletRequest;
+import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,8 +24,10 @@ import com.dokdok.storage.exception.StorageErrorCode;
 import java.util.stream.Collectors;
 
 @Slf4j
+@RequiredArgsConstructor
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    private final ErrorWebhookService errorWebhookService;
 
     /**
      * 공통 예외
@@ -196,8 +200,9 @@ public class GlobalExceptionHandler {
 
     // Runtime Exception 예외처리
     @ExceptionHandler(RuntimeException.class)
-    public ResponseEntity<ApiResponse<Void>> runtimeExceptionHandler(RuntimeException e) {
+    public ResponseEntity<ApiResponse<Void>> runtimeExceptionHandler(RuntimeException e, HttpServletRequest request) {
         log.error("Runtime Exception - Message: {}", e.getMessage(), e);
+        errorWebhookService.sendRuntimeException(e, request);
 
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)

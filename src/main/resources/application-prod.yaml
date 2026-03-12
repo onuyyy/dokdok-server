@@ -1,0 +1,4 @@
+app:
+  error-webhook:
+    enabled: ${ERROR_WEBHOOK_ENABLED:true}
+    url: ${ERROR_WEBHOOK_URL:https://onuy.app.n8n.cloud/webhook/server-error-log}
