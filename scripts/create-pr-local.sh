@@ -58,8 +58,8 @@ fi
 # ============================================
 
 if [ -z "$BASE_BRANCH" ]; then
-    # origin/dev 존재 확인
-    if git show-ref --verify --quiet refs/remotes/origin/dev; then
+    # local/dev 존재 확인
+    if git show-ref --verify --quiet refs/remotes/local/dev; then
         BASE_BRANCH="dev"
         print_info "Base 브랜치: dev (자동 감지)"
     else
@@ -84,23 +84,23 @@ print_info "현재 브랜치: ${CURRENT_BRANCH}"
 
 # remote fetch
 print_info "Remote 정보를 업데이트 중..."
-git fetch origin --quiet
+git fetch local --quiet
 
 # base 브랜치 존재 확인
-if ! git show-ref --verify --quiet refs/remotes/origin/${BASE_BRANCH}; then
-    print_error "Base 브랜치 origin/${BASE_BRANCH}가 존재하지 않습니다."
+if ! git show-ref --verify --quiet refs/remotes/local/${BASE_BRANCH}; then
+    print_error "Base 브랜치 local/${BASE_BRANCH}가 존재하지 않습니다."
     exit 1
 fi
 
-# 커밋 메시지 목록 (origin/base..HEAD)
-COMMIT_MESSAGES=$(git log origin/${BASE_BRANCH}..HEAD --pretty=format:"%s" 2>/dev/null || echo "")
+# 커밋 메시지 목록 (local/base..HEAD)
+COMMIT_MESSAGES=$(git log local/${BASE_BRANCH}..HEAD --pretty=format:"%s" 2>/dev/null || echo "")
 
 if [ -z "$COMMIT_MESSAGES" ]; then
-    print_warning "origin/${BASE_BRANCH}..HEAD에 커밋이 없습니다."
+    print_warning "local/${BASE_BRANCH}..HEAD에 커밋이 없습니다."
 fi
 
 # 변경 파일 통계
-CHANGED_FILES=$(git diff --name-only origin/${BASE_BRANCH}...HEAD 2>/dev/null || echo "")
+CHANGED_FILES=$(git diff --name-only local/${BASE_BRANCH}...HEAD 2>/dev/null || echo "")
 
 # ============================================
 # PR 타입 추론 (다수결 또는 우선순위)
