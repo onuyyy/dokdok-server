@@ -28,7 +28,7 @@
 
 | 구분 | URL |
 |------|-----|
-| 서비스 데모 | [https://dokdok.app](https://dokdok.app) |
+| 서비스 데모 | [https://dokdok.app](https://dokdok.site) |
 | API 문서 (Swagger) | [https://api.dokdok.app/swagger-ui.html](https://api.dokdok.app/swagger-ui.html) |
 | ERD | [ERD Cloud 링크](#) |
 | 아키텍처 다이어그램 | [아래 섹션 참조](#시스템-아키텍처) |
