@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # GitHub PR 생성 자동화 스크립트
-# 사용법: ./scripts/create-pr.sh [이슈번호] [PR타입] [base브랜치]
+# 사용법: ./scripts/create-pr-local.sh [이슈번호] [PR타입] [base브랜치]
 
 set -e
 
@@ -58,8 +58,8 @@ fi
 # ============================================
 
 if [ -z "$BASE_BRANCH" ]; then
-    # origin/dev 존재 확인
-    if git show-ref --verify --quiet refs/remotes/origin/dev; then
+    # local/dev 존재 확인
+    if git show-ref --verify --quiet refs/remotes/local/dev; then
         BASE_BRANCH="dev"
         print_info "Base 브랜치: dev (자동 감지)"
     else
@@ -82,25 +82,39 @@ if [ -z "$CURRENT_BRANCH" ]; then
 fi
 print_info "현재 브랜치: ${CURRENT_BRANCH}"
 
-# remote fetch
-print_info "Remote 정보를 업데이트 중..."
-git fetch origin --quiet
-
-# base 브랜치 존재 확인
-if ! git show-ref --verify --quiet refs/remotes/origin/${BASE_BRANCH}; then
-    print_error "Base 브랜치 origin/${BASE_BRANCH}가 존재하지 않습니다."
+# local remote에서 GitHub 저장소(owner/repo) 추출
+REMOTE_URL=$(git remote get-url local 2>/dev/null || echo "")
+if [ -z "$REMOTE_URL" ]; then
+    print_error "local remote URL을 확인할 수 없습니다."
     exit 1
 fi
 
-# 커밋 메시지 목록 (origin/base..HEAD)
-COMMIT_MESSAGES=$(git log origin/${BASE_BRANCH}..HEAD --pretty=format:"%s" 2>/dev/null || echo "")
+REPO_SLUG=$(echo "$REMOTE_URL" | sed -E 's#^(git@github\.com:|https://github\.com/)([^/]+/[^/]+)(\.git)?$#\2#')
+if [ "$REPO_SLUG" = "$REMOTE_URL" ]; then
+    print_error "local remote URL에서 GitHub 저장소를 추출할 수 없습니다: ${REMOTE_URL}"
+    exit 1
+fi
+print_info "대상 저장소: ${REPO_SLUG}"
+
+# remote fetch
+print_info "Remote 정보를 업데이트 중..."
+git fetch local --quiet
+
+# base 브랜치 존재 확인
+if ! git show-ref --verify --quiet refs/remotes/local/${BASE_BRANCH}; then
+    print_error "Base 브랜치 local/${BASE_BRANCH}가 존재하지 않습니다."
+    exit 1
+fi
+
+# 커밋 메시지 목록 (local/base..HEAD)
+COMMIT_MESSAGES=$(git log local/${BASE_BRANCH}..HEAD --pretty=format:"%s" 2>/dev/null || echo "")
 
 if [ -z "$COMMIT_MESSAGES" ]; then
-    print_warning "origin/${BASE_BRANCH}..HEAD에 커밋이 없습니다."
+    print_warning "local/${BASE_BRANCH}..HEAD에 커밋이 없습니다."
 fi
 
 # 변경 파일 통계
-CHANGED_FILES=$(git diff --name-only origin/${BASE_BRANCH}...HEAD 2>/dev/null || echo "")
+CHANGED_FILES=$(git diff --name-only local/${BASE_BRANCH}...HEAD 2>/dev/null || echo "")
 
 # ============================================
 # PR 타입 추론 (다수결 또는 우선순위)
@@ -263,6 +277,7 @@ if command -v gh &> /dev/null; then
 
     # PR 생성
     if gh pr create \
+        --repo "$REPO_SLUG" \
         --base "$BASE_BRANCH" \
         --head "$CURRENT_BRANCH" \
         --title "$PR_TITLE" \
@@ -276,6 +291,6 @@ else
     print_warning "gh CLI가 설치되어 있지 않습니다."
     print_info "다음 명령어로 수동으로 PR을 생성할 수 있습니다:"
     echo ""
-    echo "gh pr create --base $BASE_BRANCH --head $CURRENT_BRANCH --title \"$PR_TITLE\" --body-file scripts/PR_BODY.md"
+    echo "gh pr create --repo $REPO_SLUG --base $BASE_BRANCH --head $CURRENT_BRANCH --title \"$PR_TITLE\" --body-file scripts/PR_BODY.md"
     echo ""
 fi
