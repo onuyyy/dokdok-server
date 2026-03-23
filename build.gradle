@@ -2,6 +2,7 @@ plugins {
 	id 'java'
 	id 'org.springframework.boot' version '4.0.1'
 	id 'io.spring.dependency-management' version '1.1.7'
+	id 'jacoco'
 }
 
 group = 'com'
@@ -70,7 +71,39 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+	// 테스트 완료 후 JaCoCo 리포트만 생성 (커버리지 기준 검증 비활성화)
+	finalizedBy tasks.named('jacocoTestReport')
 }
+
+// JaCoCo 버전 고정
+jacoco {
+	toolVersion = '0.8.12'
+}
+
+tasks.named('jacocoTestReport') {
+	dependsOn tasks.named('test')
+	reports {
+		// 필수: HTML 리포트 생성
+		html.required = true
+		// 선택: XML 리포트 생성 (CI 연동 등에 활용 가능)
+		xml.required = true
+		csv.required = false
+	}
+}
+
+// tasks.named('jacocoTestCoverageVerification') {
+// 	dependsOn tasks.named('test')
+// 	violationRules {
+// 		rule {
+// 			limit {
+// 				// 전체 라인 커버리지 최소 70% 미만이면 빌드 실패
+// 				counter = 'LINE'
+// 				value = 'COVEREDRATIO'
+// 				minimum = 0.70
+// 			}
+// 		}
+// 	}
+// }
 
 // plain jar 생성 방지 (Spring Boot fat jar만 생성)
 jar {
