@@ -28,6 +28,11 @@ public enum MeetingErrorCode implements BaseErrorCode {
     MEETING_UPDATE_NOT_ALLOWED("M017", "약속 시작 24시간 이내에는 수정할 수 없습니다.", HttpStatus.BAD_REQUEST),
     MEETING_NOT_CONFIRMED("M018", "약속이 확정된 경우에만 주제를 제안할 수 있습니다.", HttpStatus.BAD_REQUEST),
     MEETING_DATE_REQUIRED("M019", "약속 시작/종료 일시는 필수입니다.", HttpStatus.BAD_REQUEST),
+    MEETING_JOIN_REQUIRES_CONFIRMED("M020", "확정된 약속만 참가 신청할 수 있습니다.", HttpStatus.BAD_REQUEST),
+    MEETING_JOIN_TIME_CONFLICT("M021", "동일 시간대의 다른 약속에 이미 참가 중입니다.", HttpStatus.BAD_REQUEST),
+    MEETING_CREATE_NOT_ALLOWED("M022", "약속 시작 24시간 이내의 일정은 신청할 수 없습니다.", HttpStatus.BAD_REQUEST),
+    MEETING_CONFIRM_NOT_ALLOWED("M023", "약속 시작 24시간 이내의 일정은 승인할 수 없습니다.", HttpStatus.BAD_REQUEST),
+    MEETING_CONFIRM_TIME_CONFLICT("M024", "모임 내 같은 시간대에 이미 확정된 약속이 있어 승인할 수 없습니다.", HttpStatus.BAD_REQUEST),
 
     INVALID_MAX_PARTICIPANTS("M013", "최대 참가 인원은 1명 이상이어야 하며, 모임 전체 인원을 초과할 수 없습니다.", HttpStatus.BAD_REQUEST),
     MAX_PARTICIPANTS_LESS_THAN_CURRENT("M014", "현재 참가 확정된 인원 수보다 적게 수정할 수 없습니다.", HttpStatus.BAD_REQUEST);

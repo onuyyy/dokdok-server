@@ -63,7 +63,9 @@ public interface MyMeetingListApi {
                                             "meetingStatus": "CONFIRMED",
                                             "myRole": "LEADER",
                                             "progressStatus": "UPCOMING",
-                                            "preOpinionTemplateConfirmed": true
+                                            "preOpinionTemplateConfirmed": true,
+                                            "hasPreOpinion": true,
+                                            "hasPersonalRetrospective": false
                                           }
                                         ],
                                         "totalCount": 8,
@@ -99,7 +101,7 @@ public interface MyMeetingListApi {
             description = """
             로그인 사용자의 내 약속 탭 카운트를 조회합니다.
             - 전체: 확정된 약속 + 완료된 약속
-            - 다가오는 약속: 3일 이내 시작하는 확정된 약속
+            - 다가오는 약속: 확정된 약속 전체 (all = upcoming + done 보장)
             - 완료된 약속: 종료된 약속
             """
     )

@@ -3,7 +3,6 @@ package com.dokdok.topic.dto.request;
 import com.dokdok.book.dto.request.BookReviewRequest;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -13,9 +12,8 @@ import java.util.List;
 public record TopicAnswerBulkSaveRequest(
         @NotNull
         @Valid
-        @Schema(description = "책 평가 정보")
+        @Schema(description = "사전의견 전용 책 평가 정보. 저장 시 내 책장 리뷰에는 반영되지 않습니다.")
         BookReviewRequest review,
-        @NotEmpty
         @Valid
         @Schema(description = "답변 목록")
         List<AnswerItem> answers

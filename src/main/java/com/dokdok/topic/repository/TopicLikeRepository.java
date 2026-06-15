@@ -12,7 +12,7 @@ import java.util.Set;
 @Repository
 public interface TopicLikeRepository extends JpaRepository<TopicLike, Long> {
 
-    boolean existsByTopicId(Long topicId);
+    boolean existsByTopicIdAndUserId(Long topicId, Long userId);
 
     void deleteByTopicIdAndUserId(Long topicId, Long id);
 

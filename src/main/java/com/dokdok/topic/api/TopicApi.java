@@ -185,7 +185,7 @@ public interface TopicApi {
                             mediaType = MediaType.APPLICATION_JSON_VALUE,
                             schema = @Schema(implementation = TopicsWithActionsResponse.class),
                             examples = @ExampleObject(value = """
-                                    {"code":"SUCCESS","message":"제안된 주제 조회를 성공했습니다.","data":{"items":[{"topicId":1,"meetingId":10,"title":"이 책의 핵심 메시지는 무엇인가?","description":"저자가 전달하고자 하는 핵심 메시지에 대해 토론합니다.","topicType":"DISCUSSION","topicTypeLabel":"토론형","topicStatus":"PROPOSED","likeCount":5,"canDelete":true,"isLiked":false,"createdByInfo":{"userId":1,"nickname":"독서왕"}}],"pageSize":10,"hasNext":true,"nextCursor":{"likeCount":5,"topicId":1},"totalCount":25,"actions":{"canConfirm":false,"canSuggest":true}}}
+                                    {"code":"SUCCESS","message":"제안된 주제 조회를 성공했습니다.","data":{"items":[{"topicId":1,"meetingId":10,"title":"이 책의 핵심 메시지는 무엇인가?","description":"저자가 전달하고자 하는 핵심 메시지에 대해 토론합니다.","topicType":"DISCUSSION","topicTypeLabel":"토론형","topicStatus":"PROPOSED","likeCount":5,"canDelete":true,"isLiked":false,"createdByInfo":{"userId":1,"nickname":"독서왕"}}],"pageSize":10,"hasNext":true,"nextCursor":{"likeCount":5,"topicId":1},"totalCount":25,"actions":{"canConfirm":false,"canSuggest":true,"canLike":true}}}
                                     """)
                     )
             ),

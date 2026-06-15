@@ -1,5 +1,6 @@
 package com.dokdok.book.dto.response;
 
+import com.dokdok.book.entity.BookMeetingProgressStatus;
 import com.dokdok.book.entity.BookReadingStatus;
 import com.dokdok.book.entity.PersonalBook;
 import com.dokdok.book.repository.PersonalBookListProjection;
@@ -12,6 +13,7 @@ import java.util.List;
 
 @Builder
 public record PersonalBookListResponse(
+        Long personalBookId,
         Long bookId,
         String title,
         String publisher,
@@ -19,12 +21,14 @@ public record PersonalBookListResponse(
         BookReadingStatus bookReadingStatus,
         String thumbnail,
         BigDecimal rating,
-        List<PersonalBookGatheringResponse> gatherings
+        List<PersonalBookGatheringResponse> gatherings,
+        BookMeetingProgressStatus meetingProgressStatus
 ) {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     public static PersonalBookListResponse from(PersonalBook entity) {
         return PersonalBookListResponse.builder()
+                .personalBookId(entity.getId())
                 .bookId(entity.getBook().getId())
                 .title(entity.getBook().getBookName())
                 .publisher(entity.getBook().getPublisher())
@@ -43,6 +47,7 @@ public record PersonalBookListResponse(
 
     public static PersonalBookListResponse from(PersonalBookListProjection projection) {
         return PersonalBookListResponse.builder()
+                .personalBookId(projection.getPersonalBookId())
                 .bookId(projection.getBookId())
                 .title(projection.getTitle())
                 .publisher(projection.getPublisher())
@@ -51,7 +56,17 @@ public record PersonalBookListResponse(
                 .thumbnail(projection.getThumbnail())
                 .rating(projection.getRating())
                 .gatherings(parseGatherings(projection.getGatherings()))
+                .meetingProgressStatus(parseMeetingProgressStatus(projection.getMeetingProgressStatus()))
                 .build();
+    }
+
+    private static BookMeetingProgressStatus parseMeetingProgressStatus(String value) {
+        if (value == null) return null;
+        try {
+            return BookMeetingProgressStatus.valueOf(value);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     private static List<PersonalBookGatheringResponse> parseGatherings(String gatheringsJson) {

@@ -2,10 +2,7 @@ package com.dokdok.topic.service;
 
 import com.dokdok.book.dto.request.BookReviewRequest;
 import com.dokdok.book.dto.response.BookReviewResponse;
-import com.dokdok.book.repository.BookReviewRepository;
-import com.dokdok.book.service.BookReviewService;
 import com.dokdok.gathering.service.GatheringValidator;
-import com.dokdok.meeting.entity.Meeting;
 import com.dokdok.meeting.service.MeetingValidator;
 import com.dokdok.topic.dto.request.TopicAnswerBulkSaveRequest;
 import com.dokdok.topic.dto.request.TopicAnswerBulkSubmitRequest;
@@ -20,7 +17,6 @@ import com.dokdok.user.entity.User;
 import com.dokdok.global.exception.GlobalException;
 import java.util.List;
 import java.math.BigDecimal;
-import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,6 +34,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -57,10 +54,7 @@ class TopicAnswerServiceTest {
     private MeetingValidator meetingValidator;
 
     @Mock
-    private BookReviewRepository bookReviewRepository;
-
-    @Mock
-    private BookReviewService bookReviewService;
+    private PreOpinionBookReviewService preOpinionBookReviewService;
 
     @InjectMocks
     private TopicAnswerService topicAnswerService;
@@ -106,12 +100,8 @@ class TopicAnswerServiceTest {
                 .willReturn(List.of());
         given(topicAnswerRepository.save(any(TopicAnswer.class)))
                 .willReturn(saved);
-        given(meetingValidator.findMeetingOrThrow(1L))
-                .willReturn(Meeting.builder().book(com.dokdok.book.entity.Book.builder().id(10L).build()).build());
-        given(bookReviewRepository.findByBookIdAndUserId(10L, 1L))
-                .willReturn(Optional.empty());
-        BookReviewResponse reviewResponse = new BookReviewResponse(1L, 10L, 1L, BigDecimal.valueOf(4.5), List.of());
-        given(bookReviewService.createReview(eq(10L), any(BookReviewRequest.class)))
+        BookReviewResponse reviewResponse = new BookReviewResponse(1L, 10L, 1L, BigDecimal.valueOf(4.5), List.of(), null);
+        given(preOpinionBookReviewService.upsertReview(eq(1L), any(BookReviewRequest.class)))
                 .willReturn(reviewResponse);
 
         TopicAnswerBulkSaveRequest request = new TopicAnswerBulkSaveRequest(
@@ -125,6 +115,7 @@ class TopicAnswerServiceTest {
 
         ArgumentCaptor<TopicAnswer> captor = ArgumentCaptor.forClass(TopicAnswer.class);
         verify(topicAnswerRepository).save(captor.capture());
+        verify(preOpinionBookReviewService, never()).applyToPersonalBookReview(eq(1L), any(BookReviewRequest.class));
 
         TopicAnswer captured = captor.getValue();
         assertThat(captured.getTopic()).isEqualTo(topic);
@@ -185,12 +176,8 @@ class TopicAnswerServiceTest {
                 .willReturn(List.of(topic));
         given(topicAnswerRepository.findByMeetingIdUserId(1L, 1L))
                 .willReturn(List.of(answer));
-        given(meetingValidator.findMeetingOrThrow(1L))
-                .willReturn(Meeting.builder().book(com.dokdok.book.entity.Book.builder().id(10L).build()).build());
-        given(bookReviewRepository.findByBookIdAndUserId(10L, 1L))
-                .willReturn(Optional.empty());
-        given(bookReviewService.createReview(eq(10L), any(BookReviewRequest.class)))
-                .willReturn(new BookReviewResponse(1L, 10L, 1L, BigDecimal.valueOf(4.5), List.of()));
+        given(preOpinionBookReviewService.upsertReview(eq(1L), any(BookReviewRequest.class)))
+                .willReturn(new BookReviewResponse(1L, 10L, 1L, BigDecimal.valueOf(4.5), List.of(), null));
 
         TopicAnswerBulkSaveRequest request = new TopicAnswerBulkSaveRequest(
                 new BookReviewRequest(BigDecimal.valueOf(4.5), List.of(1L)),
@@ -202,6 +189,7 @@ class TopicAnswerServiceTest {
         );
 
         assertThat(answer.getContent()).isEqualTo("수정된 내용");
+        verify(preOpinionBookReviewService, never()).applyToPersonalBookReview(eq(1L), any(BookReviewRequest.class));
         assertThat(response.answers()).hasSize(1);
         assertThat(response.answers().get(0).topicId()).isEqualTo(12L);
         assertThat(response.answers().get(0).isSubmitted()).isFalse();
@@ -224,12 +212,8 @@ class TopicAnswerServiceTest {
                 .willReturn(List.of(topic));
         given(topicAnswerRepository.findByMeetingIdUserId(1L, 1L))
                 .willReturn(List.of(answer));
-        given(meetingValidator.findMeetingOrThrow(1L))
-                .willReturn(Meeting.builder().book(com.dokdok.book.entity.Book.builder().id(10L).build()).build());
-        given(bookReviewRepository.findByBookIdAndUserId(10L, 1L))
-                .willReturn(Optional.empty());
-        given(bookReviewService.createReview(eq(10L), any(BookReviewRequest.class)))
-                .willReturn(new BookReviewResponse(1L, 10L, 1L, BigDecimal.valueOf(4.5), List.of()));
+        given(preOpinionBookReviewService.upsertReview(eq(1L), any(BookReviewRequest.class)))
+                .willReturn(new BookReviewResponse(1L, 10L, 1L, BigDecimal.valueOf(4.5), List.of(), null));
 
         TopicAnswerBulkSaveRequest request = new TopicAnswerBulkSaveRequest(
                 new BookReviewRequest(BigDecimal.valueOf(4.5), List.of(1L)),
@@ -258,12 +242,8 @@ class TopicAnswerServiceTest {
                 .willReturn(List.of(topic));
         given(topicAnswerRepository.findByMeetingIdUserId(1L, 1L))
                 .willReturn(List.of(answer));
-        given(meetingValidator.findMeetingOrThrow(1L))
-                .willReturn(Meeting.builder().book(com.dokdok.book.entity.Book.builder().id(10L).build()).build());
-        given(bookReviewRepository.findByBookIdAndUserId(10L, 1L))
-                .willReturn(Optional.empty());
-        given(bookReviewService.createReview(eq(10L), any(BookReviewRequest.class)))
-                .willReturn(new BookReviewResponse(1L, 10L, 1L, BigDecimal.valueOf(4.5), List.of()));
+        given(preOpinionBookReviewService.upsertReview(eq(1L), any(BookReviewRequest.class)))
+                .willReturn(new BookReviewResponse(1L, 10L, 1L, BigDecimal.valueOf(4.5), List.of(), null));
 
         TopicAnswerBulkSubmitRequest request = new TopicAnswerBulkSubmitRequest(
                 new BookReviewRequest(BigDecimal.valueOf(4.5), List.of(1L)),
@@ -272,6 +252,7 @@ class TopicAnswerServiceTest {
         PreOpinionSubmitResponse response =
                 topicAnswerService.submitMyAnswer(1L, 1L, request);
 
+        verify(preOpinionBookReviewService).applyToPersonalBookReview(eq(1L), any(BookReviewRequest.class));
         assertThat(answer.getIsSubmitted()).isTrue();
         assertThat(response.answers()).hasSize(1);
         assertThat(response.answers().get(0).topicId()).isEqualTo(12L);

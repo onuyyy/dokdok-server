@@ -40,12 +40,28 @@ public interface GatheringMemberRepository extends JpaRepository<GatheringMember
     );
 
     /**
+     * 강퇴 이력(removed_at NOT NULL) 존재 여부 확인.
+     * 엔티티의 @SQLRestriction("removed_at IS NULL")이 JPQL에 자동 적용되어
+     * 강퇴된 레코드를 조회할 수 없으므로 네이티브 쿼리로 확인한다.
+     */
+    @Query(value = "SELECT EXISTS(" +
+            "SELECT 1 FROM gathering_member " +
+            "WHERE gathering_id = :gatheringId " +
+            "AND user_id = :userId " +
+            "AND removed_at IS NOT NULL)", nativeQuery = true)
+    boolean existsRemovedMember(
+            @Param("gatheringId") Long gatheringId,
+            @Param("userId") Long userId
+    );
+
+    /**
      * 특정 모임의 모든 활성 멤버 조회 (User 정보 포함)
      */
     @Query("SELECT gm FROM GatheringMember gm " +
             "JOIN FETCH gm.user u " +
             "JOIN FETCH gm.gathering g " +
             "WHERE gm.gathering.id = :gatheringId " +
+            "AND gm.memberStatus = 'ACTIVE' " +
             "AND gm.removedAt IS NULL")
     List<GatheringMember> findAllMembersByGatheringId(@Param("gatheringId") Long gatheringId);
 

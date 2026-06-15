@@ -1,105 +1,13 @@
 spring:
-  # Database Configuration
-  datasource:
-    url: ${DB_URL}
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
-    driver-class-name: org.postgresql.Driver
-
-  # OAuth2 Configuration
-  security:
-    oauth2:
-      client:
-        registration:
-          kakao:
-            client-id: ${KAKAO_CLIENT_ID}
-            client-secret: ${KAKAO_CLIENT_SECRET}
-            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
-            authorization-grant-type: authorization_code
-            client-authentication-method: client_secret_post
-            scope:
-              - account_email
-            client-name: Kakao
-        provider:
-          kakao:
-            authorization-uri: https://kauth.kakao.com/oauth/authorize
-            token-uri: https://kauth.kakao.com/oauth/token
-            user-info-uri: https://kapi.kakao.com/v2/user/me
-            user-name-attribute: id
-
-  # JPA Configuration
   jpa:
-    hibernate:
-      ddl-auto: update
     show-sql: true
-    properties:
-      hibernate:
-        format_sql: true
-        default_batch_fetch_size: 100
-        javax:
-          persistence:
-            schema-generation:
-              create-source: metadata
-    database-platform: org.hibernate.dialect.PostgreSQLDialect
 
-# Logging Configuration
 logging:
-  level:
-    com.dokdok: DEBUG
-    org.hibernate.SQL: INFO
-    # OAuth 디버깅 (문제 해결 시 DEBUG로 변경)
-    org.springframework.security: INFO
-    org.springframework.security.oauth2: INFO
-    org.springframework.security.web.authentication: DEBUG
-    org.springframework.security.oauth2.client: DEBUG
-  pattern:
-    console: '%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n'
   file:
-    name: /app/logs/dkdk.log
-  logback:
-    rollingpolicy:
-      max-history: 30
-      max-file-size: 100MB
+    path: /opt/dokdok/dev/logs
 
-# Server Configuration
-server:
-  port: 8080
-  forward-headers-strategy: framework  # Nginx X-Forwarded 헤더 인식
-  servlet:
-    session:
-      timeout: 30m  # 세션 타임아웃 30분
-      cookie:
-        same-site: none   # OAuth GET 리다이렉트에서 쿠키 전송 허용, prod에서는 lax로 해얗람. fe로컬 요청을 위해 설정.
-        secure: true     # HTTPS에서만 쿠키 전송
-        http-only: true  # XSS 방지
-        path: /          # 모든 경로에서 쿠키 사용
-
-# Swagger/OpenAPI Configuration
 springdoc:
   swagger-ui:
     servers:
-      - url: localhost:8080/
-        description: 개발 서버 (HTTPS)
-
-# Kakao API Configuration
-kakao:
-  api:
-    key: ${KAKAO_API_KEY}
-    base-url: ${KAKAO_API_BASE_URL}
-
-# MinIO Configuration
-minio:
-  internal-endpoint: ${MINIO_INTERNAL_ENDPOINT:http://minio:9000}
-  external-endpoint: ${MINIO_EXTERNAL_ENDPOINT:https://storage.dokdok.site}
-  access-key: ${MINIO_ACCESS_KEY}
-  secret-key: ${MINIO_SECRET_KEY}
-  bucket: ${MINIO_BUCKET:dokdok-storage}
-
-ai:
-  api:
-    base-url: http://localhost:8000
-    summary-path: /summaries/topics
-    stt-path: /stt/summary
-
-stt:
-  temp-dir: ${STT_TEMP_DIR:}
+      - url: https://dev.dokdok.site
+        description: 개발 서버

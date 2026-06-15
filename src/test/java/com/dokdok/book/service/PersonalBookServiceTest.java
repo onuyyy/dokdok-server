@@ -13,6 +13,7 @@ import com.dokdok.book.entity.PersonalBook;
 import com.dokdok.book.exception.BookErrorCode;
 import com.dokdok.book.exception.BookException;
 import com.dokdok.book.repository.BookRepository;
+import com.dokdok.book.repository.BookReviewRepository;
 import com.dokdok.book.repository.PersonalBookListProjection;
 import com.dokdok.book.repository.PersonalBookRepository;
 import com.dokdok.global.util.SecurityUtil;
@@ -66,6 +67,9 @@ class PersonalBookServiceTest {
 
     @Mock
     private BookValidator bookValidator;
+
+    @Mock
+    private BookReviewRepository bookReviewRepository;
 
     private MockedStatic<SecurityUtil> securityUtilMock;
 
@@ -287,6 +291,11 @@ class PersonalBookServiceTest {
 
         PersonalBookListProjection projection = new PersonalBookListProjection() {
             @Override
+            public Long getPersonalBookId() {
+                return 20L;
+            }
+
+            @Override
             public Long getBookId() {
                 return book.getId();
             }
@@ -329,6 +338,11 @@ class PersonalBookServiceTest {
             @Override
             public LocalDateTime getAddedAt() {
                 return addedAt;
+            }
+
+            @Override
+            public String getMeetingProgressStatus() {
+                return null;
             }
         };
 
@@ -436,8 +450,8 @@ class PersonalBookServiceTest {
                 .build();
 
         securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
-        when(userValidator.findUserOrThrow(userId)).thenReturn(user);
-        when(bookValidator.validateInBookShelf(userId, bookId)).thenReturn(personalBook);
+        when(personalBookRepository.findTopByUserIdAndBookIdOrderByAddedAtDesc(userId, bookId))
+                .thenReturn(Optional.of(personalBook));
 
         // when
         PersonalBookDetailResponse response = personalBookService.getPersonalBook(bookId);
@@ -450,8 +464,45 @@ class PersonalBookServiceTest {
         assertThat(response.bookReadingStatus()).isEqualTo(BookReadingStatus.COMPLETED);
 
         securityUtilMock.verify(SecurityUtil::getCurrentUserId, times(1));
-        verify(userValidator, times(1)).findUserOrThrow(userId);
-        verify(bookValidator, times(1)).validateInBookShelf(userId, bookId);
+        verify(personalBookRepository, times(1)).findTopByUserIdAndBookIdOrderByAddedAtDesc(userId, bookId);
+    }
+
+    @Test
+    @DisplayName("모임을 통해 추가된 책도 단일 조회가 가능하다")
+    void getPersonalBookDetail_GatheringBook_Success() {
+        // given
+        Long userId = 1L;
+        Long bookId = 10L;
+
+        User user = User.builder().id(userId).kakaoId(12345L).nickname("tester").build();
+        Book book = Book.builder()
+                .id(bookId)
+                .bookName("모임 책")
+                .publisher("출판사")
+                .author("저자")
+                .build();
+
+        // gathering_id가 설정된 PersonalBook (모임을 통해 추가된 책)
+        PersonalBook gatheringPersonalBook = PersonalBook.builder()
+                .id(200L)
+                .user(user)
+                .book(book)
+                .readingStatus(BookReadingStatus.READING)
+                .build();
+
+        securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
+        when(personalBookRepository.findTopByUserIdAndBookIdOrderByAddedAtDesc(userId, bookId))
+                .thenReturn(Optional.of(gatheringPersonalBook));
+
+        // when
+        PersonalBookDetailResponse response = personalBookService.getPersonalBook(bookId);
+
+        // then
+        assertThat(response.personalBookId()).isEqualTo(200L);
+        assertThat(response.title()).isEqualTo("모임 책");
+        assertThat(response.bookReadingStatus()).isEqualTo(BookReadingStatus.READING);
+
+        verify(personalBookRepository, times(1)).findTopByUserIdAndBookIdOrderByAddedAtDesc(userId, bookId);
     }
 
     @Test
@@ -461,16 +512,9 @@ class PersonalBookServiceTest {
         Long userId = 1L;
         Long bookId = 10L;
 
-        User user = User.builder()
-                .id(userId)
-                .kakaoId(12345L)
-                .nickname("tester")
-                .build();
-
         securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
-        when(userValidator.findUserOrThrow(userId)).thenReturn(user);
-        when(bookValidator.validateInBookShelf(userId, bookId))
-                .thenThrow(new BookException(BookErrorCode.BOOK_NOT_IN_SHELF));
+        when(personalBookRepository.findTopByUserIdAndBookIdOrderByAddedAtDesc(userId, bookId))
+                .thenReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> personalBookService.getPersonalBook(bookId))
@@ -478,8 +522,7 @@ class PersonalBookServiceTest {
                 .hasFieldOrPropertyWithValue("errorCode", BookErrorCode.BOOK_NOT_IN_SHELF);
 
         securityUtilMock.verify(SecurityUtil::getCurrentUserId, times(1));
-        verify(userValidator, times(1)).findUserOrThrow(userId);
-        verify(bookValidator, times(1)).validateInBookShelf(userId, bookId);
+        verify(personalBookRepository, times(1)).findTopByUserIdAndBookIdOrderByAddedAtDesc(userId, bookId);
     }
 
     @Test
@@ -512,7 +555,9 @@ class PersonalBookServiceTest {
 
         securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
         when(userValidator.findUserOrThrow(userId)).thenReturn(user);
-        when(bookValidator.validateInBookShelf(userId, bookId)).thenReturn(personalBook);
+        when(personalBookRepository.findTopByUserIdAndBookIdOrderByAddedAtDesc(userId, bookId))
+                .thenReturn(Optional.of(personalBook));
+        when(bookReviewRepository.findByBookIdAndUserId(bookId, userId)).thenReturn(Optional.empty());
 
         // when
         personalBookService.deleteBook(bookId);
@@ -520,7 +565,7 @@ class PersonalBookServiceTest {
         // then
         securityUtilMock.verify(SecurityUtil::getCurrentUserId, times(1));
         verify(userValidator, times(1)).findUserOrThrow(userId);
-        verify(bookValidator, times(1)).validateInBookShelf(userId, bookId);
+        verify(personalBookRepository, times(1)).findTopByUserIdAndBookIdOrderByAddedAtDesc(userId, bookId);
         verify(personalBookRepository, times(1)).delete(personalBook);
     }
 
@@ -539,8 +584,8 @@ class PersonalBookServiceTest {
 
         securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
         when(userValidator.findUserOrThrow(userId)).thenReturn(user);
-        when(bookValidator.validateInBookShelf(userId, bookId))
-                .thenThrow(new BookException(BookErrorCode.BOOK_NOT_IN_SHELF));
+        when(personalBookRepository.findTopByUserIdAndBookIdOrderByAddedAtDesc(userId, bookId))
+                .thenReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> personalBookService.deleteBook(bookId))
@@ -549,7 +594,7 @@ class PersonalBookServiceTest {
 
         securityUtilMock.verify(SecurityUtil::getCurrentUserId, times(1));
         verify(userValidator, times(1)).findUserOrThrow(userId);
-        verify(bookValidator, times(1)).validateInBookShelf(userId, bookId);
+        verify(personalBookRepository, times(1)).findTopByUserIdAndBookIdOrderByAddedAtDesc(userId, bookId);
         verify(personalBookRepository, never()).delete(any());
     }
 
@@ -584,8 +629,12 @@ class PersonalBookServiceTest {
 
         securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
         when(userValidator.findUserOrThrow(userId)).thenReturn(user);
-        when(bookValidator.validateInBookShelf(userId, 10L)).thenReturn(firstPersonalBook);
-        when(bookValidator.validateInBookShelf(userId, 11L)).thenReturn(secondPersonalBook);
+        when(personalBookRepository.findTopByUserIdAndBookIdOrderByAddedAtDesc(userId, 10L))
+                .thenReturn(Optional.of(firstPersonalBook));
+        when(personalBookRepository.findTopByUserIdAndBookIdOrderByAddedAtDesc(userId, 11L))
+                .thenReturn(Optional.of(secondPersonalBook));
+        when(bookReviewRepository.findByBookIdAndUserId(10L, userId)).thenReturn(Optional.empty());
+        when(bookReviewRepository.findByBookIdAndUserId(11L, userId)).thenReturn(Optional.empty());
 
         // when
         personalBookService.deleteBooks(bookIds);
@@ -593,8 +642,8 @@ class PersonalBookServiceTest {
         // then
         securityUtilMock.verify(SecurityUtil::getCurrentUserId, times(1));
         verify(userValidator, times(1)).findUserOrThrow(userId);
-        verify(bookValidator, times(1)).validateInBookShelf(userId, 10L);
-        verify(bookValidator, times(1)).validateInBookShelf(userId, 11L);
+        verify(personalBookRepository, times(1)).findTopByUserIdAndBookIdOrderByAddedAtDesc(userId, 10L);
+        verify(personalBookRepository, times(1)).findTopByUserIdAndBookIdOrderByAddedAtDesc(userId, 11L);
         verify(personalBookRepository, times(1)).delete(firstPersonalBook);
         verify(personalBookRepository, times(1)).delete(secondPersonalBook);
     }
@@ -622,13 +671,15 @@ class PersonalBookServiceTest {
 
         securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
         when(userValidator.findUserOrThrow(userId)).thenReturn(user);
-        when(bookValidator.validateInBookShelf(userId, 10L)).thenReturn(personalBook);
+        when(personalBookRepository.findTopByUserIdAndBookIdOrderByAddedAtDesc(userId, 10L))
+                .thenReturn(Optional.of(personalBook));
+        when(bookReviewRepository.findByBookIdAndUserId(10L, userId)).thenReturn(Optional.empty());
 
         // when
         personalBookService.deleteBooks(bookIds);
 
         // then
-        verify(bookValidator, times(1)).validateInBookShelf(userId, 10L);
+        verify(personalBookRepository, times(1)).findTopByUserIdAndBookIdOrderByAddedAtDesc(userId, 10L);
         verify(personalBookRepository, times(1)).delete(personalBook);
     }
 
@@ -666,7 +717,8 @@ class PersonalBookServiceTest {
                 null,
                 null,
                 null,
-                10
+                10,
+                null
         );
 
         // then
@@ -713,7 +765,8 @@ class PersonalBookServiceTest {
                 new BigDecimal("4.0"),
                 OffsetDateTime.of(secondAddedAt, ZoneOffset.UTC),
                 20L,
-                10
+                10,
+                null
         );
 
         // then
@@ -731,6 +784,11 @@ class PersonalBookServiceTest {
             LocalDateTime addedAt
     ) {
         return new PersonalBookListProjection() {
+            @Override
+            public Long getPersonalBookId() {
+                return null;
+            }
+
             @Override
             public Long getBookId() {
                 return bookId;
@@ -774,6 +832,11 @@ class PersonalBookServiceTest {
             @Override
             public LocalDateTime getAddedAt() {
                 return addedAt;
+            }
+
+            @Override
+            public String getMeetingProgressStatus() {
+                return null;
             }
         };
     }

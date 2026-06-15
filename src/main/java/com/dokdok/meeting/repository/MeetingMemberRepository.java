@@ -20,6 +20,26 @@ public interface MeetingMemberRepository extends JpaRepository<MeetingMember, Lo
 
     List<MeetingMember> findAllByMeetingId(Long meetingId);
 
+    @Query("""
+      SELECT mm FROM MeetingMember mm
+      JOIN FETCH mm.user u
+      JOIN FETCH mm.meeting m
+      WHERE mm.meeting.id = :meetingId
+      AND mm.canceledAt IS NULL
+      ORDER BY (
+          SELECT MIN(ta.createdAt)
+          FROM TopicAnswer ta
+          WHERE ta.user = mm.user
+          AND ta.topic.meeting.id = :meetingId
+          AND ta.topic.topicStatus = com.dokdok.topic.entity.TopicStatus.CONFIRMED
+          AND ta.isSubmitted = true
+      ) DESC NULLS LAST
+      """)
+    List<MeetingMember> findAllByMeetingIdOrderByTopicAnswerDate(
+            @Param("meetingId") Long meetingId
+    );
+
+
     @Query("""                                                                                                                                                           
             SELECT mm FROM MeetingMember mm
             JOIN FETCH mm.user u
@@ -52,10 +72,37 @@ public interface MeetingMemberRepository extends JpaRepository<MeetingMember, Lo
             """)
     int countActiveMembers(@Param("meetingId") Long meetingId);
 
-    boolean existsByMeetingIdAndUserId(
-            Long meetingId,
-            Long userId
+    @Query("""
+      SELECT COUNT(mm) > 0 FROM MeetingMember mm
+      WHERE mm.meeting.id = :meetingId
+      AND mm.user.id = :userId
+      AND mm.canceledAt IS NULL
+      """)
+    boolean existsActiveMemberByMeetingIdAndUserId(
+            @Param("meetingId") Long meetingId,
+            @Param("userId") Long userId
     );
+
+    @Query("""
+            SELECT COUNT(mm) > 0
+            FROM MeetingMember mm
+            JOIN mm.meeting m
+            WHERE mm.user.id = :userId
+            AND mm.canceledAt IS NULL
+            AND m.id <> :meetingId
+            AND m.meetingStatus = :meetingStatus
+            AND m.meetingStartDate < :endDate
+            AND m.meetingEndDate > :startDate
+            """)
+    boolean existsOverlappingConfirmedMeetingByUserId(
+            @Param("userId") Long userId,
+            @Param("meetingId") Long meetingId,
+            @Param("meetingStatus") MeetingStatus meetingStatus,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate
+    );
+
+    boolean existsByMeetingIdAndUserId(Long meetingId, Long userId);
 
     @Query("""
             SELECT mm.meeting.id FROM MeetingMember mm
@@ -80,6 +127,18 @@ public interface MeetingMemberRepository extends JpaRepository<MeetingMember, Lo
             @Param("userId") Long userId,
             @Param("gatheringId") Long gatheringId,
             @Param("meetingStatus") MeetingStatus meetingStatus
+    );
+
+    @Query("""
+            SELECT count(mm) FROM MeetingMember mm
+            JOIN mm.meeting m
+            WHERE mm.user.id = :userId
+            AND mm.canceledAt IS NULL
+            AND m.gathering.id = :gatheringId
+            """)
+    int countMeetingsByUserIdAndGatheringId(
+            @Param("userId") Long userId,
+            @Param("gatheringId") Long gatheringId
     );
 
     @Query("""
@@ -140,21 +199,27 @@ public interface MeetingMemberRepository extends JpaRepository<MeetingMember, Lo
 
     @Query(
             value = """
-                    SELECT m FROM MeetingMember mm
-                    JOIN mm.meeting m
+                    SELECT m FROM Meeting m
                     JOIN FETCH m.book
-                    WHERE mm.user.id = :userId
-                    AND mm.canceledAt IS NULL
-                    AND m.gathering.id = :gatheringId
+                    WHERE m.gathering.id = :gatheringId
                     AND m.meetingStatus = :meetingStatus
+                    AND EXISTS (
+                        SELECT 1 FROM MeetingMember mm
+                        WHERE mm.meeting = m
+                        AND mm.user.id = :userId
+                        AND mm.canceledAt IS NULL
+                    )
                     """,
             countQuery = """
-                    SELECT count(mm) FROM MeetingMember mm
-                    JOIN mm.meeting m
-                    WHERE mm.user.id = :userId
-                    AND mm.canceledAt IS NULL
-                    AND m.gathering.id = :gatheringId
+                    SELECT count(m) FROM Meeting m
+                    WHERE m.gathering.id = :gatheringId
                     AND m.meetingStatus = :meetingStatus
+                    AND EXISTS (
+                        SELECT 1 FROM MeetingMember mm
+                        WHERE mm.meeting = m
+                        AND mm.user.id = :userId
+                        AND mm.canceledAt IS NULL
+                    )
                     """
     )
     Page<Meeting> findMeetingsByUserIdAndStatus(

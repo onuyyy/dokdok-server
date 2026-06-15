@@ -6,6 +6,9 @@ import com.dokdok.meeting.entity.Meeting;
 import com.dokdok.meeting.entity.MeetingMember;
 import com.dokdok.meeting.entity.MeetingStatus;
 import com.dokdok.global.response.CursorResponse;
+import com.dokdok.meeting.exception.MeetingErrorCode;
+import com.dokdok.meeting.exception.MeetingException;
+import com.dokdok.meeting.repository.MeetingMemberRepository;
 import com.dokdok.meeting.service.MeetingValidator;
 import com.dokdok.topic.dto.request.ConfirmTopicsRequest;
 import com.dokdok.topic.dto.request.SuggestTopicRequest;
@@ -47,6 +50,7 @@ public class TopicService {
     private final TopicRepository topicRepository;
     private final TopicLikeRepository topicLikeRepository;
     private final TopicAnswerRepository topicAnswerRepository;
+    private final MeetingMemberRepository meetingMemberRepository;
     private final GatheringValidator gatheringValidator;
     private final MeetingValidator meetingValidator;
     private final TopicValidator topicValidator;
@@ -90,6 +94,9 @@ public class TopicService {
         meetingValidator.validateMeetingStatus(meetingId);
 
         MeetingMember meetingMember = meetingValidator.getMeetingMember(meetingId, userId);
+        if (!topicRepository.canSuggestTopic(meetingId, userId)) {
+            throw new MeetingException(MeetingErrorCode.MEETING_ALREADY_CONFIRMED);
+        }
 
         Meeting meeting = meetingMember.getMeeting();
         User user = meetingMember.getUser();
@@ -120,10 +127,11 @@ public class TopicService {
         gatheringValidator.validateGathering(gatheringId);
         meetingValidator.validateMeetingInGathering(meetingId, gatheringId);
 
+        boolean isMeetingMember = userId != null && meetingMemberRepository.existsByMeetingIdAndUserId(meetingId, userId);
         boolean canConfirm = topicRepository.canConfirmTopic(meetingId, userId);
         boolean canSuggest = topicRepository.canSuggestTopic(meetingId, userId);
 
-        TopicsWithActionsResponse.Actions actions = TopicsWithActionsResponse.Actions.of(canConfirm, canSuggest);
+        TopicsWithActionsResponse.Actions actions = TopicsWithActionsResponse.Actions.of(canConfirm, canSuggest, isMeetingMember);
 
         // pageSize + 1개를 조회하여 다음 페이지 존재 여부 판단
         PageRequest pageable = PageRequest.of(0, pageSize + 1);
@@ -197,6 +205,22 @@ public class TopicService {
         }
 
         return ConfirmTopicsResponse.from(meetingId, confirmedTopics);
+    }
+
+    @Transactional
+    public AutoConfirmResult autoConfirmTopics(Meeting meeting) {
+        List<Topic> topics = topicRepository.findAutoConfirmCandidates(meeting.getId());
+        if (topics.isEmpty()) {
+            return AutoConfirmResult.empty(meeting.getId());
+        }
+
+        int order = 1;
+        for (Topic topic : topics) {
+            topic.updateStatus(TopicStatus.CONFIRMED);
+            topic.updateConfirmOrder(order++);
+        }
+
+        return new AutoConfirmResult(meeting.getId(), topics.size());
     }
 
     @Transactional(readOnly = true)
@@ -295,7 +319,7 @@ public class TopicService {
 
         Topic topic = topicValidator.getTopicInMeeting(topicId, meetingId);
 
-        boolean exists = topicLikeRepository.existsByTopicId(topicId);
+        boolean exists = topicLikeRepository.existsByTopicIdAndUserId(topicId, user.getId());
 
         TopicMessage message;
         int newCount;
@@ -313,5 +337,14 @@ public class TopicService {
         }
 
         return TopicLikeResponse.from(topicId, message, newCount);
+    }
+
+    public record AutoConfirmResult(
+            Long meetingId,
+            int confirmedTopicCount
+    ) {
+        private static AutoConfirmResult empty(Long meetingId) {
+            return new AutoConfirmResult(meetingId, 0);
+        }
     }
 }

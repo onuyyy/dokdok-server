@@ -3,7 +3,9 @@ package com.dokdok.book.api;
 import com.dokdok.book.dto.request.PersonalReadingRecordCreateRequest;
 import com.dokdok.book.dto.request.PersonalReadingRecordUpdateRequest;
 import com.dokdok.book.dto.request.PreOpinionTimeType;
+import com.dokdok.book.dto.request.TimelineSortType;
 import com.dokdok.book.dto.response.*;
+import com.dokdok.book.entity.RecordType;
 import com.dokdok.global.response.ApiResponse;
 import com.dokdok.global.response.CursorResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -13,6 +15,7 @@ import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.OffsetDateTime;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Tag(name = "독서 기록", description = "책별 독서 기록 관련 API")
 @RequestMapping("/api/book")
@@ -434,6 +438,9 @@ public interface PersonalBookRecordApi {
                     내 책장에 있는 책의 독서 기록을 조회합니다.
                     - 경로의 personalBookId로 책을 지정합니다.
                     - 로그인한 사용자 기준으로 본인 책의 기록만 조회됩니다.
+                    - gatheringId 파라미터로 모임별 필터링할 수 있습니다. 미전달 시 전체 조회됩니다.
+                    - recordType 파라미터로 기록 유형(MEMO/QUOTE)을 필터링할 수 있습니다. 미전달 시 전체 조회됩니다.
+                    - sort 파라미터로 정렬 기준을 지정합니다. DESC(최신순, 기본값) / ASC(오래된순)
                     - cursorCreatedAt/cursorRecordId/size 파라미터로 다음 페이지를 조회합니다.
                     """
     )
@@ -530,6 +537,10 @@ public interface PersonalBookRecordApi {
     ResponseEntity<ApiResponse<CursorPageResponse<PersonalReadingRecordListResponse, ReadingRecordCursor>>> getMyReadingRecords(
             @Parameter(description = "개인 책장 ID (personal_book 테이블 PK)", required = true, example = "10")
             @PathVariable Long personalBookId,
+            @Parameter(description = "모임 ID 필터 (gathering 테이블 PK). 미전달 시 전체 조회", example = "3")
+            @RequestParam(required = false) Long gatheringId,
+            @Parameter(description = "기록 유형 필터 (MEMO | QUOTE). 미전달 시 전체 조회", example = "MEMO")
+            @RequestParam(required = false) RecordType recordType,
             @Parameter(
                     description = "커서 - 마지막 아이템 createdAt (ISO 8601, cursorRecordId와 함께 전달)",
                     example = ""
@@ -540,7 +551,12 @@ public interface PersonalBookRecordApi {
             @Parameter(description = "커서 - 마지막 아이템 recordId (cursorCreatedAt과 함께 전달)", example = "5")
             @RequestParam(required = false) Long cursorRecordId,
             @Parameter(description = "한 페이지당 아이템 수", example = "10")
-            @RequestParam(required = false) Integer size
+            @RequestParam(required = false) Integer size,
+            @Parameter(
+                    description = "정렬 기준. DESC: 최신순(기본값), ASC: 오래된순",
+                    schema = @Schema(allowableValues = {"DESC", "ASC"}, defaultValue = "DESC")
+            )
+            @RequestParam(required = false, defaultValue = "DESC") Sort.Direction sort
     );
 
     @Operation(
@@ -614,11 +630,12 @@ public interface PersonalBookRecordApi {
             summary = "독서 타임라인 조회 (developer: 권우희)",
             description = """
                     독서 기록/사전 의견/개인 회고/공동 회고를 하나의 타임라인으로 커서 기반 조회합니다.
-                    - personalBook의 gatheringId가 null이면 사전 의견/회고는 제외됩니다.
                     - 사전 의견(PRE_OPINION)은 **내 답변이 있는 미팅만** 포함합니다.
                     - PRE_OPINION의 preOpinion 객체에는 gatheringId/meetingId가 포함됩니다.
-                    - 정렬: eventAt DESC, typeOrder DESC, sourceId DESC
                     - preOpinionTime: 사전 의견 정렬 기준 (MEETING_START | ANSWER_CREATED, 기본값 ANSWER_CREATED)
+                    - gatheringId: 미전달 시 전체 조회, 전달 시 해당 모임의 항목만 조회
+                    - recordType: 미전달 시 전체 조회, MEMO/QUOTE 전달 시 독서 기록 유형 필터 (회고/사전의견은 영향 없음)
+                    - sort: DESC(최신순, 기본값) / ASC(오래된순)
 
                     **사용 방법**
                     - 첫 페이지: `?size=10&preOpinionTime=ANSWER_CREATED`
@@ -674,6 +691,57 @@ public interface PersonalBookRecordApi {
             @Parameter(description = "한 페이지당 아이템 수", example = "10")
             @RequestParam(required = false) Integer size,
             @Parameter(description = "사전 의견 정렬 기준 (MEETING_START | ANSWER_CREATED)", example = "ANSWER_CREATED")
-            @RequestParam(required = false, defaultValue = "ANSWER_CREATED") PreOpinionTimeType preOpinionTime
+            @RequestParam(required = false, defaultValue = "ANSWER_CREATED") PreOpinionTimeType preOpinionTime,
+            @Parameter(description = "모임 ID 필터 (미전달 시 전체 조회)")
+            @RequestParam(required = false) Long gatheringId,
+            @Parameter(description = "독서 기록 유형 필터 (MEMO | QUOTE, 미전달 시 전체 조회)")
+            @RequestParam(required = false) RecordType recordType,
+            @Parameter(description = "정렬 기준 (DESC: 최신순, ASC: 오래된순)", example = "DESC")
+            @RequestParam(required = false, defaultValue = "DESC") TimelineSortType sort
+    );
+
+    @Operation(
+            summary = "책에 연결된 모임 목록 조회 (developer: 경서영)",
+            description = """
+                    특정 개인 책장의 책에 연결된 모임 목록을 조회합니다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "모임 목록 조회 성공",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "code": "SUCCESS",
+                                      "message": "책에 연결된 모임 목록 조회 성공",
+                                      "data": [
+                                        { "gatheringId": 1, "gatheringName": "독서모임A" },
+                                        { "gatheringId": 2, "gatheringName": "독서모임B" }
+                                      ]
+                                    }
+                                    """))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401",
+                    description = "인증 실패",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            examples = @ExampleObject(value = """
+                                    {"code": "G102", "message": "인증이 필요합니다.", "data": null}
+                                    """))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "책을 찾을 수 없음",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            examples = @ExampleObject(value = """
+                                    {"code": "B003", "message": "책장에 해당 책이 존재하지 않습니다.", "data": null}
+                                    """))
+            )
+    })
+    @GetMapping("/{personalBookId}/gatherings")
+    ResponseEntity<ApiResponse<List<PersonalBookGatheringResponse>>> getGatheringsForBook(
+            @Parameter(description = "개인 책장 ID (personal_book 테이블 PK)", required = true, example = "10")
+            @PathVariable Long personalBookId
     );
 }

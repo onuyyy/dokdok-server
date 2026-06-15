@@ -7,7 +7,7 @@ import java.util.List;
 
 @Schema(description = "사전 의견 일괄 저장 응답")
 public record PreOpinionSaveResponse(
-        @Schema(description = "책 평가 응답")
+        @Schema(description = "사전의견 전용 책 평가 응답")
         BookReviewResponse review,
         @Schema(description = "토픽 답변 저장 결과")
         List<TopicAnswerResponse> answers

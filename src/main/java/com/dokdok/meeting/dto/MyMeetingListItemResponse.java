@@ -41,6 +41,12 @@ public record MyMeetingListItemResponse(
         MeetingProgressStatus progressStatus,
 
         @Schema(description = "사전 의견 템플릿 확정 여부", example = "true")
-        boolean preOpinionTemplateConfirmed
+        boolean preOpinionTemplateConfirmed,
+
+        @Schema(description = "내 사전 의견 작성(제출) 완료 여부", example = "true")
+        boolean hasPreOpinion,
+
+        @Schema(description = "내 개인 회고 작성 완료 여부", example = "true")
+        boolean hasPersonalRetrospective
 ) {
 }

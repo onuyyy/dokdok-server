@@ -6,6 +6,10 @@ spring:
       max-file-size: 5MB
       max-request-size: 10MB
   datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/dokdok}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 20  # 최대 커넥션 수
       minimum-idle: 5       # 최소 유휴 커넥션
@@ -13,11 +17,54 @@ spring:
       idle-timeout: 600000   # 유휴 커넥션 유지 시간 (10분)
       max-lifetime: 1800000  # 커넥션 최대 수명 (30분)
       leak-detection-threshold: 60000  # 커넥션 누수 감지 (1분)
-
   profiles:
     active: local
   config:
     import: optional:file:.env[.properties]
+  security:
+    oauth2:
+      client:
+        registration:
+          kakao:
+            client-id: ${KAKAO_CLIENT_ID}
+            client-secret: ${KAKAO_CLIENT_SECRET}
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            authorization-grant-type: authorization_code
+            client-authentication-method: client_secret_post
+            scope:
+              - account_email
+            client-name: Kakao
+        provider:
+          kakao:
+            authorization-uri: https://kauth.kakao.com/oauth/authorize
+            token-uri: https://kauth.kakao.com/oauth/token
+            user-info-uri: https://kapi.kakao.com/v2/user/me
+            user-name-attribute: id
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+        default_batch_fetch_size: 100
+        javax:
+          persistence:
+            schema-generation:
+              create-source: metadata
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+
+server:
+  port: 8080
+  forward-headers-strategy: framework
+  servlet:
+    session:
+      timeout: 24h
+      cookie:
+        same-site: none
+        secure: true
+        http-only: true
+        path: /
+
 app:
   frontend:
     default-url: http://localhost:5173
@@ -33,6 +80,19 @@ app:
     url: ${ERROR_WEBHOOK_URL:https://onuy.app.n8n.cloud/webhook-test/server-error-log}
     connect-timeout-ms: ${ERROR_WEBHOOK_CONNECT_TIMEOUT_MS:1000}
     read-timeout-ms: ${ERROR_WEBHOOK_READ_TIMEOUT_MS:1500}
+
+kakao:
+  api:
+    key: ${KAKAO_API_KEY}
+    base-url: ${KAKAO_API_BASE_URL}
+
+minio:
+  internal-endpoint: ${MINIO_INTERNAL_ENDPOINT:http://minio:9000}
+  external-endpoint: ${MINIO_EXTERNAL_ENDPOINT:https://storage.dokdok.site}
+  access-key: ${MINIO_ACCESS_KEY}
+  secret-key: ${MINIO_SECRET_KEY}
+  bucket: ${MINIO_BUCKET:dokdok-storage}
+
 ai:
   api:
     base-url: ${AI_API_BASE_URL:http://localhost:8000}

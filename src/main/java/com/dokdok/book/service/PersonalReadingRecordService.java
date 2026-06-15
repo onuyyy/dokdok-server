@@ -2,6 +2,7 @@ package com.dokdok.book.service;
 
 import com.dokdok.book.dto.request.PersonalReadingRecordCreateRequest;
 import com.dokdok.book.dto.response.CursorPageResponse;
+import com.dokdok.book.dto.response.PersonalBookGatheringResponse;
 import com.dokdok.book.dto.response.PersonalReadingRecordCreateResponse;
 import com.dokdok.book.dto.response.PersonalReadingRecordListResponse;
 import com.dokdok.book.dto.response.PersonalReadingTopicAnswerResponse;
@@ -12,6 +13,7 @@ import com.dokdok.book.entity.RecordType;
 import com.dokdok.book.exception.RecordErrorCode;
 import com.dokdok.book.exception.RecordException;
 import com.dokdok.book.dto.request.PersonalReadingRecordUpdateRequest;
+import com.dokdok.book.repository.PersonalBookRepository;
 import com.dokdok.book.repository.PersonalReadingRecordRepository;
 import com.dokdok.global.util.SecurityUtil;
 import com.dokdok.meeting.entity.Meeting;
@@ -47,6 +49,7 @@ public class PersonalReadingRecordService {
     private static final int DEFAULT_PAGE_SIZE = 10;
 
     private final PersonalReadingRecordRepository personalReadingRecordRepository;
+    private final PersonalBookRepository personalBookRepository;
     private final UserValidator userValidator;
     private final BookValidator bookValidator;
     private final MeetingRepository meetingRepository;
@@ -111,42 +114,53 @@ public class PersonalReadingRecordService {
 
     public CursorPageResponse<PersonalReadingRecordListResponse, ReadingRecordCursor> getRecords(
             Long personalBookId,
+            Long gatheringId,
+            RecordType recordType,
             OffsetDateTime cursorCreatedAt,
             Long cursorRecordId,
-            Integer size
+            Integer size,
+            Sort.Direction sort
     ) {
         User userEntity = userValidator.findUserOrThrow(SecurityUtil.getCurrentUserId());
         PersonalBook personalBookEntity = bookValidator.validatePersonalBook(userEntity.getId(), personalBookId);
         int pageSize = resolvePageSize(size);
         LocalDateTime cursorCreatedAtValue = cursorCreatedAt != null ? cursorCreatedAt.toLocalDateTime() : null;
+        Sort.Direction effectiveSort = sort != null ? sort : Sort.Direction.DESC;
 
         boolean hasCursor = cursorCreatedAtValue != null && cursorRecordId != null;
+        boolean isDesc = effectiveSort == Sort.Direction.DESC;
         List<PersonalReadingRecord> entities;
         if (hasCursor) {
-            entities = personalReadingRecordRepository.findRecordsByCursor(
-                    personalBookEntity.getId(),
-                    userEntity.getId(),
-                    cursorCreatedAtValue,
-                    cursorRecordId,
-                    PageRequest.of(0, pageSize + 1)
-            );
-        } else {
-            entities = personalReadingRecordRepository
-                    .findAllByPersonalBook_IdAndUserId(
+            entities = isDesc
+                    ? personalReadingRecordRepository.findRecordsByCursor(
                             personalBookEntity.getId(),
                             userEntity.getId(),
-                            PageRequest.of(
-                                    0,
-                                    pageSize + 1,
-                                    Sort.by(Sort.Direction.DESC, "createdAt", "id")
-                            )
+                            gatheringId,
+                            recordType,
+                            cursorCreatedAtValue,
+                            cursorRecordId,
+                            PageRequest.of(0, pageSize + 1))
+                    : personalReadingRecordRepository.findRecordsByCursorAsc(
+                            personalBookEntity.getId(),
+                            userEntity.getId(),
+                            gatheringId,
+                            recordType,
+                            cursorCreatedAtValue,
+                            cursorRecordId,
+                            PageRequest.of(0, pageSize + 1));
+        } else {
+            entities = personalReadingRecordRepository
+                    .findRecords(
+                            personalBookEntity.getId(),
+                            userEntity.getId(),
+                            gatheringId,
+                            recordType,
+                            PageRequest.of(0, pageSize + 1, Sort.by(effectiveSort, "createdAt", "id"))
                     )
                     .getContent();
         }
-        long totalCount = personalReadingRecordRepository.countByPersonalBook_IdAndUserId(
-                personalBookEntity.getId(),
-                userEntity.getId()
-        );
+        long totalCount = personalReadingRecordRepository.countRecords(
+                personalBookEntity.getId(), userEntity.getId(), gatheringId, recordType);
 
         boolean hasNext = entities.size() > pageSize;
         List<PersonalReadingRecord> pageEntities = hasNext ? entities.subList(0, pageSize) : entities;
@@ -205,6 +219,16 @@ public class PersonalReadingRecordService {
                 meeting.getMeetingStartDate(),
                 items
         );
+    }
+
+    public List<PersonalBookGatheringResponse> getGatheringsForBook(Long personalBookId) {
+        Long userId = SecurityUtil.getCurrentUserId();
+        PersonalBook personalBook = bookValidator.validatePersonalBook(userId, personalBookId);
+        return personalBookRepository
+                .findActiveGatheringsWithMeetingsByUserAndBook(userId, personalBookId)
+                .stream()
+                .map(p -> new PersonalBookGatheringResponse(p.getGatheringId(), p.getGatheringName()))
+                .toList();
     }
 
     private Map<String, Object> normalizeMeta(RecordType recordType, Map<String, Object> meta) {

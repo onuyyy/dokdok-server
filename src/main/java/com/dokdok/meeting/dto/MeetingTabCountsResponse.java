@@ -6,16 +6,16 @@ import lombok.Builder;
 @Schema(description = "약속 탭별 카운트 응답")
 @Builder
 public record MeetingTabCountsResponse(
-        @Schema(description = "전체 확정된 약속 수", example = "10")
+        @Schema(description = "전체 약속 수 (확정 + 완료)", example = "10")
         int all,
 
-        @Schema(description = "다가오는 약속 수 (3일 이내)", example = "2")
+        @Schema(description = "예정된 약속 수 (확정된 약속 전체)", example = "2")
         int upcoming,
 
         @Schema(description = "완료된 약속 수", example = "5")
         int done,
 
-        @Schema(description = "내가 참여한 완료 약속 수", example = "3")
+        @Schema(description = "내가 참여한 약속 수 (전체 상태)", example = "3")
         int joined
 ) {
 }

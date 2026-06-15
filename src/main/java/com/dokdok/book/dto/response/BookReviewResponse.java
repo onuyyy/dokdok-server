@@ -5,6 +5,7 @@ import com.dokdok.book.entity.KeywordType;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -19,7 +20,9 @@ public record BookReviewResponse(
         @Schema(description = "평점", example = "4.5")
         BigDecimal rating,
         @Schema(description = "선택한 키워드 목록")
-        List<KeywordInfo> keywords
+        List<KeywordInfo> keywords,
+        @Schema(description = "작성 일시", example = "2024-01-15T10:30:00")
+        LocalDateTime createdAt
 ) {
     public static BookReviewResponse from(BookReview review) {
         List<KeywordInfo> keywordInfos = review.getKeywords().stream()
@@ -35,8 +38,20 @@ public record BookReviewResponse(
                 review.getBook().getId(),
                 review.getUser().getId(),
                 review.getRating(),
-                keywordInfos
+                keywordInfos,
+                review.getCreatedAt()
         );
+    }
+
+    public static BookReviewResponse of(
+            Long reviewId,
+            Long bookId,
+            Long userId,
+            BigDecimal rating,
+            List<KeywordInfo> keywords,
+            LocalDateTime createdAt
+    ) {
+        return new BookReviewResponse(reviewId, bookId, userId, rating, keywords, createdAt);
     }
 
     @Schema(description = "리뷰 키워드 정보")

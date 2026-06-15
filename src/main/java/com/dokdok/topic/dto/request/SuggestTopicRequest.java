@@ -14,8 +14,7 @@ public record SuggestTopicRequest(
         @Size(max = 100, message = "제목은 100자 이내여야 합니다")
         String title,
 
-        @Schema(description = "주제 설명", example = "이 책에서 전달하고자 하는 핵심 메시지는 무엇인가요?", requiredMode = Schema.RequiredMode.REQUIRED)
-        @NotBlank(message = "설명은 필수입니다")
+        @Schema(description = "주제 설명", example = "이 책에서 전달하고자 하는 핵심 메시지는 무엇인가요?", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
         @Size(max = 1000, message = "설명은 1000자 이내여야 합니다")
         String description,
 

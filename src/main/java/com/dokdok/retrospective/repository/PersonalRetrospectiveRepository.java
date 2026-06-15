@@ -17,6 +17,15 @@ public interface PersonalRetrospectiveRepository extends JpaRepository<PersonalM
 
     boolean existsByMeetingIdAndUserId(Long meetingId, Long userId);
 
+    @Query("""
+            SELECT pmr.meeting.id
+            FROM PersonalMeetingRetrospective pmr
+            WHERE pmr.meeting.id IN :meetingIds
+            AND pmr.user.id = :userId
+            """)
+    List<Long> findMeetingIdsWithRetrospective(@Param("meetingIds") List<Long> meetingIds,
+                                               @Param("userId") Long userId);
+
     Optional<PersonalMeetingRetrospective> findByIdAndUser_Id(Long retrospectiveId, Long userId);
 
     @Query("""

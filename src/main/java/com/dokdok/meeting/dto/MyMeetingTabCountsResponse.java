@@ -9,7 +9,7 @@ public record MyMeetingTabCountsResponse(
         @Schema(description = "전체 약속 수", example = "10")
         int all,
 
-        @Schema(description = "다가오는 약속 수 (3일 이내)", example = "2")
+        @Schema(description = "다가오는 약속 수 (확정된 약속 전체)", example = "2")
         int upcoming,
 
         @Schema(description = "완료된 약속 수", example = "5")

@@ -25,6 +25,10 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import com.dokdok.book.exception.BookException;
+import com.dokdok.book.exception.BookErrorCode;
 
 @SpringBootTest
 @ActiveProfiles("test")
@@ -202,24 +206,19 @@ class BookReviewHistoryListenerTest {
     }
 
     @Test
-    @DisplayName("책 리뷰 변경이 없으면 UPDATE 히스토리가 저장되지 않는다")
-    void updateReviewNoChange_doesNotSaveHistory() {
+    @DisplayName("책 리뷰 변경이 없으면 예외가 발생한다")
+    void updateReviewNoChange_throwsException() {
         // given
         BookReview review = BookReview.create(book, user, new BigDecimal("4.5"), List.of(keyword1));
         bookReviewRepository.save(review);
         entityManager.flush();
         entityManager.clear();
 
-        // when
+        // when & then
         BookReview savedReview = bookReviewRepository.findById(review.getId()).orElseThrow();
-        savedReview.updateReview(new BigDecimal("4.5"), List.of(keyword1));
-        entityManager.flush();
-        entityManager.clear();
-
-        // then
-        List<BookReviewHistory> histories = bookReviewHistoryRepository.findAll();
-        assertThat(histories).hasSize(1);
-        assertThat(histories.get(0).getAction()).isEqualTo(HistoryAction.INSERT);
+        assertThatThrownBy(() -> savedReview.updateReview(new BigDecimal("4.5"), List.of(keyword1)))
+                .isInstanceOf(BookException.class)
+                .hasFieldOrPropertyWithValue("errorCode", BookErrorCode.BOOK_REVIEW_NO_CHANGES);
     }
 
     @Test

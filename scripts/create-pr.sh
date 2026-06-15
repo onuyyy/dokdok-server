@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # GitHub PR 생성 자동화 스크립트
-# 사용법: ./scripts/create-pr.sh [이슈번호] [PR타입] [base브랜치]
+# 사용법: ./scripts/create-pr.sh <이슈번호> [PR타입] [base브랜치]
 
 set -e
 
@@ -34,24 +34,42 @@ print_warning() {
     echo -e "${YELLOW}⚠️  $1${NC}"
 }
 
+extract_repo_full_name() {
+    local remote_url="$1"
+
+    remote_url="${remote_url%.git}"
+
+    if [[ "$remote_url" =~ ^git@github\.com:(.+/[^/]+)$ ]]; then
+        echo "${BASH_REMATCH[1]}"
+        return 0
+    fi
+
+    if [[ "$remote_url" =~ ^https://github\.com/(.+/[^/]+)$ ]]; then
+        echo "${BASH_REMATCH[1]}"
+        return 0
+    fi
+
+    return 1
+}
+
 # ============================================
 # 인자 파싱
 # ============================================
 
-# 인자 규칙
-# 1) 첫 번째 인자가 숫자면: [이슈번호] [PR타입] [base브랜치]
-# 2) 첫 번째 인자가 숫자가 아니면: [PR타입] [base브랜치]
-if [ -n "$1" ] && [[ "$1" =~ ^[0-9]+$ ]]; then
-    ISSUE_NUMBER="$1"
-    PR_TYPE="${2:-}"
-    BASE_BRANCH="${3:-}"
-    print_info "이슈 번호: #${ISSUE_NUMBER}"
-else
-    ISSUE_NUMBER=""
-    PR_TYPE="${1:-}"
-    BASE_BRANCH="${2:-}"
-    print_info "이슈 번호: 없음"
+if [ -z "$1" ]; then
+    print_error "이슈 번호가 필요합니다."
+    echo "사용법: $0 <이슈번호> [PR타입] [base브랜치]"
+    echo "예시: $0 21"
+    echo "예시: $0 21 FEAT"
+    echo "예시: $0 21 FEAT dev"
+    exit 1
 fi
+
+ISSUE_NUMBER="$1"
+PR_TYPE="${2:-}"
+BASE_BRANCH="${3:-}"
+
+print_info "이슈 번호: #${ISSUE_NUMBER}"
 
 # ============================================
 # Base 브랜치 결정
@@ -86,6 +104,16 @@ print_info "현재 브랜치: ${CURRENT_BRANCH}"
 print_info "Remote 정보를 업데이트 중..."
 git fetch origin --quiet
 
+ORIGIN_URL=$(git remote get-url origin 2>/dev/null || echo "")
+REPO_FULL_NAME=$(extract_repo_full_name "$ORIGIN_URL" || true)
+
+if [ -z "$REPO_FULL_NAME" ]; then
+    print_error "origin remote에서 GitHub 저장소 정보를 파싱할 수 없습니다: ${ORIGIN_URL}"
+    exit 1
+fi
+
+print_info "대상 저장소: ${REPO_FULL_NAME}"
+
 # base 브랜치 존재 확인
 if ! git show-ref --verify --quiet refs/remotes/origin/${BASE_BRANCH}; then
     print_error "Base 브랜치 origin/${BASE_BRANCH}가 존재하지 않습니다."
@@ -101,6 +129,7 @@ fi
 
 # 변경 파일 통계
 CHANGED_FILES=$(git diff --name-only origin/${BASE_BRANCH}...HEAD 2>/dev/null || echo "")
+NUMSTAT=$(git diff --numstat origin/${BASE_BRANCH}...HEAD 2>/dev/null || echo "")
 
 # ============================================
 # PR 타입 추론 (다수결 또는 우선순위)
@@ -227,13 +256,202 @@ else
     fi
 fi
 
-if [ -n "$ISSUE_NUMBER" ]; then
-    PR_TITLE="[#${ISSUE_NUMBER}][${PR_TYPE}] ${SUMMARY}"
-else
-    PR_TITLE="[${PR_TYPE}] ${SUMMARY}"
-fi
+PR_TITLE="[#${ISSUE_NUMBER}][${PR_TYPE}] ${SUMMARY}"
 
 print_success "PR 제목: ${PR_TITLE}"
+
+# ============================================
+# 체크박스 자동 선택
+# ============================================
+
+case "$PR_TYPE" in
+    FEAT)
+        CHECKBOX_FEAT="- [x] 기능 추가"
+        CHECKBOX_FIX="- [ ] 버그 수정"
+        CHECKBOX_REFACTOR="- [ ] 코드 리팩토링"
+        CHECKBOX_DOCS="- [ ] 문서 수정"
+        CHECKBOX_CHORE="- [ ] 기타 (설명)"
+        ;;
+    FIX)
+        CHECKBOX_FEAT="- [ ] 기능 추가"
+        CHECKBOX_FIX="- [x] 버그 수정"
+        CHECKBOX_REFACTOR="- [ ] 코드 리팩토링"
+        CHECKBOX_DOCS="- [ ] 문서 수정"
+        CHECKBOX_CHORE="- [ ] 기타 (설명)"
+        ;;
+    REFACTOR)
+        CHECKBOX_FEAT="- [ ] 기능 추가"
+        CHECKBOX_FIX="- [ ] 버그 수정"
+        CHECKBOX_REFACTOR="- [x] 코드 리팩토링"
+        CHECKBOX_DOCS="- [ ] 문서 수정"
+        CHECKBOX_CHORE="- [ ] 기타 (설명)"
+        ;;
+    DOCS)
+        CHECKBOX_FEAT="- [ ] 기능 추가"
+        CHECKBOX_FIX="- [ ] 버그 수정"
+        CHECKBOX_REFACTOR="- [ ] 코드 리팩토링"
+        CHECKBOX_DOCS="- [x] 문서 수정"
+        CHECKBOX_CHORE="- [ ] 기타 (설명)"
+        ;;
+    CHORE)
+        CHECKBOX_FEAT="- [ ] 기능 추가"
+        CHECKBOX_FIX="- [ ] 버그 수정"
+        CHECKBOX_REFACTOR="- [ ] 코드 리팩토링"
+        CHECKBOX_DOCS="- [ ] 문서 수정"
+        CHECKBOX_CHORE="- [x] 기타 (설명)"
+        ;;
+    *)
+        CHECKBOX_FEAT="- [ ] 기능 추가"
+        CHECKBOX_FIX="- [ ] 버그 수정"
+        CHECKBOX_REFACTOR="- [ ] 코드 리팩토링"
+        CHECKBOX_DOCS="- [ ] 문서 수정"
+        CHECKBOX_CHORE="- [ ] 기타 (설명)"
+        ;;
+esac
+
+# ============================================
+# 주요 변경 사항 생성
+# ============================================
+
+MAIN_CHANGES=""
+
+if [ -n "$NUMSTAT" ]; then
+    # 폴더별로 변경 사항 그룹화 (bash 3.2 호환)
+    # 1. 폴더 추출 및 통계와 함께 임시 파일 생성
+    temp_stats=$(mktemp)
+
+    while IFS=$'\t' read -r added deleted file; do
+        if [ -z "$file" ]; then
+            continue
+        fi
+
+        # 상위 폴더 추출 (src/main/java, src/test/java는 더 깊게)
+        if [[ "$file" == src/main/java/* ]] || [[ "$file" == src/test/java/* ]]; then
+            folder=$(echo "$file" | cut -d'/' -f1-6)  # com/dokdok/meeting 레벨까지
+        elif [[ "$file" == src/main/* ]] || [[ "$file" == src/test/* ]]; then
+            folder=$(echo "$file" | cut -d'/' -f1-3)
+        elif [[ "$file" == */* ]]; then
+            folder=$(echo "$file" | cut -d'/' -f1-2)
+        else
+            folder=$(echo "$file" | cut -d'/' -f1)
+        fi
+
+        # numstat에서 바이너리 파일은 "-"가 들어올 수 있음
+        if ! [[ "$added" =~ ^[0-9]+$ ]]; then
+            added=0
+        fi
+        if ! [[ "$deleted" =~ ^[0-9]+$ ]]; then
+            deleted=0
+        fi
+
+        # 폴더:added:deleted 형태로 저장
+        echo "${folder}:${added}:${deleted}" >> "$temp_stats"
+    done <<< "$NUMSTAT"
+
+    # 2. 폴더별로 정렬 및 합산
+    if [ -s "$temp_stats" ]; then
+        sorted_stats=$(sort "$temp_stats")
+
+        prev_folder=""
+        total_added=0
+        total_deleted=0
+        file_count=0
+
+        while IFS=':' read -r folder added deleted; do
+            if [ "$folder" = "$prev_folder" ] || [ -z "$prev_folder" ]; then
+                # 같은 폴더면 누적
+                total_added=$((total_added + added))
+                total_deleted=$((total_deleted + deleted))
+                file_count=$((file_count + 1))
+                prev_folder="$folder"
+            else
+                # 다른 폴더면 이전 폴더 출력 후 초기화
+                # 커밋 메시지에서 요약 추출
+                summary="요구사항 반영"
+                if [ -n "$COMMIT_MESSAGES" ]; then
+                    commit_summary=$(git log origin/${BASE_BRANCH}..HEAD --pretty=format:"%s" -- "$prev_folder" 2>/dev/null | head -n 2 | \
+                        sed -E 's/^[a-z]+(\([^)]+\))? *: *//' || true)
+                    commit_count=$(git log origin/${BASE_BRANCH}..HEAD --pretty=format:"%s" -- "$prev_folder" 2>/dev/null | wc -l | tr -d ' ')
+                    if [ "$commit_count" -eq 1 ]; then
+                        summary=$(echo "$commit_summary" | head -n 1)
+                    elif [ "$commit_count" -gt 1 ]; then
+                        summary="$(echo "$commit_summary" | head -n 1) 외 $((commit_count - 1))건"
+                    fi
+                fi
+
+                MAIN_CHANGES="${MAIN_CHANGES}- \`${prev_folder}\`: +${total_added}/-${total_deleted} (${file_count} files) — ${summary}\n"
+
+                # 새 폴더로 초기화
+                prev_folder="$folder"
+                total_added=$added
+                total_deleted=$deleted
+                file_count=1
+            fi
+        done <<< "$sorted_stats"
+
+        # 마지막 폴더 출력
+        if [ -n "$prev_folder" ]; then
+            summary="요구사항 반영"
+            if [ -n "$COMMIT_MESSAGES" ]; then
+                commit_summary=$(git log origin/${BASE_BRANCH}..HEAD --pretty=format:"%s" -- "$prev_folder" 2>/dev/null | head -n 2 | \
+                    sed -E 's/^[a-z]+(\([^)]+\))? *: *//' || true)
+                commit_count=$(git log origin/${BASE_BRANCH}..HEAD --pretty=format:"%s" -- "$prev_folder" 2>/dev/null | wc -l | tr -d ' ')
+                if [ "$commit_count" -eq 1 ]; then
+                    summary=$(echo "$commit_summary" | head -n 1)
+                elif [ "$commit_count" -gt 1 ]; then
+                    summary="$(echo "$commit_summary" | head -n 1) 외 $((commit_count - 1))건"
+                fi
+            fi
+
+            MAIN_CHANGES="${MAIN_CHANGES}- \`${prev_folder}\`: +${total_added}/-${total_deleted} (${file_count} files) — ${summary}\n"
+        fi
+    fi
+
+    # 임시 파일 삭제
+    rm -f "$temp_stats"
+else
+    MAIN_CHANGES="- 변경 사항 없음"
+fi
+
+# ============================================
+# PR 본문 생성
+# ============================================
+
+PR_BODY=$(cat <<EOF
+## PR 요약
+> 이 PR이 어떤 변경을 하는지 간단히 설명하고, 체크 표시는 괄호 사이에 소문자 'x'를 삽입하세요.
+
+${CHECKBOX_FEAT}
+${CHECKBOX_FIX}
+${CHECKBOX_REFACTOR}
+${CHECKBOX_DOCS}
+${CHECKBOX_CHORE}
+
+---
+
+## 이슈 번호
+- Closes #${ISSUE_NUMBER}
+
+---
+
+## 주요 변경 사항
+> 주요 파일, 로직, 컴포넌트 등을 구체적으로 적어주세요.
+
+$(echo -e "$MAIN_CHANGES")
+
+---
+
+## 참고 사항
+> 리뷰어가 알아야 할 추가 정보, 테스트 방법 등을 작성해주세요.
+
+예:
+- 테스트 계정 정보
+- 관련 API 엔드포인트
+- 로컬 테스트 방법
+
+---
+EOF
+)
 
 # ============================================
 # 파일 저장
@@ -241,18 +459,24 @@ print_success "PR 제목: ${PR_TITLE}"
 
 # 스크립트 디렉토리 경로
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PR_BODY_FILE="${SCRIPT_DIR}/PR_BODY.md"
 
 echo "$PR_TITLE" > "${SCRIPT_DIR}/PR_TITLE.txt"
-
 print_success "PR 제목이 scripts/PR_TITLE.txt에 저장되었습니다."
 
-if [ ! -f "$PR_BODY_FILE" ]; then
-    print_error "PR 본문 파일이 없습니다: scripts/PR_BODY.md"
-    print_info "직접 작성한 PR 본문을 scripts/PR_BODY.md에 저장한 뒤 다시 실행해주세요."
-    exit 1
+# ============================================
+# PR 본문: 사용자가 직접 작성한 내용을 사용 (2단계)
+# ============================================
+#   1) scripts/PR_BODY.md 가 없으면 → 자동 생성 본문을 '초안'으로 저장하고 종료한다.
+#      사용자가 내용을 다듬은 뒤 같은 명령어로 다시 실행하면 그 본문으로 PR을 생성한다.
+#   2) scripts/PR_BODY.md 가 있으면 → 그 내용을 그대로 사용해 PR을 생성한다.
+if [ ! -s "${SCRIPT_DIR}/PR_BODY.md" ]; then
+    echo "$PR_BODY" > "${SCRIPT_DIR}/PR_BODY.md"
+    print_warning "PR 본문 초안을 scripts/PR_BODY.md에 생성했습니다."
+    print_info "내용을 직접 작성/수정한 뒤, 같은 명령어로 스크립트를 다시 실행하면 PR이 생성됩니다."
+    exit 0
 fi
-print_info "PR 본문 파일 사용: scripts/PR_BODY.md (직접 작성본)"
+
+print_success "작성된 scripts/PR_BODY.md를 그대로 사용해 PR을 생성합니다."
 
 # ============================================
 # PR 생성
@@ -263,11 +487,16 @@ if command -v gh &> /dev/null; then
 
     # PR 생성
     if gh pr create \
+        --repo "$REPO_FULL_NAME" \
         --base "$BASE_BRANCH" \
         --head "$CURRENT_BRANCH" \
         --title "$PR_TITLE" \
-        --body-file "$PR_BODY_FILE"; then
+        --body-file "${SCRIPT_DIR}/PR_BODY.md"; then
         print_success "PR이 성공적으로 생성되었습니다!"
+        # 다음 PR 작성 시 이전 본문이 그대로 재사용되지 않도록 정리한다.
+        # (작성한 본문은 이미 생성된 PR에 반영되어 있다.)
+        rm -f "${SCRIPT_DIR}/PR_BODY.md"
+        print_info "scripts/PR_BODY.md를 정리했습니다. (다음 PR은 새 초안부터 시작)"
     else
         print_error "PR 생성에 실패했습니다."
         exit 1
@@ -276,6 +505,6 @@ else
     print_warning "gh CLI가 설치되어 있지 않습니다."
     print_info "다음 명령어로 수동으로 PR을 생성할 수 있습니다:"
     echo ""
-    echo "gh pr create --base $BASE_BRANCH --head $CURRENT_BRANCH --title \"$PR_TITLE\" --body-file scripts/PR_BODY.md"
+    echo "gh pr create --repo $REPO_FULL_NAME --base $BASE_BRANCH --head $CURRENT_BRANCH --title \"$PR_TITLE\" --body-file scripts/PR_BODY.md"
     echo ""
 fi

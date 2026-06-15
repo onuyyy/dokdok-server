@@ -238,6 +238,7 @@ public interface BookApi {
                                               "data": {
                                                 "items": [
                                                   {
+                                                    "personalBookId": 100,
                                                     "bookId": 1,
                                                     "title": "예제 도서명",
                                                     "publisher": "예제 출판사",
@@ -347,7 +348,9 @@ public interface BookApi {
             @Parameter(description = "커서 - 마지막 아이템 bookId (cursorAddedAt과 함께 전달)")
             @RequestParam(required = false) Long cursorBookId,
             @Parameter(description = "한 페이지당 아이템 수", example = "10")
-            @RequestParam(required = false) Integer size
+            @RequestParam(required = false) Integer size,
+            @Parameter(description = "약속 진행 상태 필터 (BEFORE: 약속 전, AFTER: 약속 후)", example = "BEFORE")
+            @RequestParam(required = false) com.dokdok.book.entity.BookMeetingProgressStatus meetingProgressStatus
     );
 
     @Operation(
@@ -559,7 +562,8 @@ public interface BookApi {
             description = """
                     내 책장에 등록된 책 여러 권을 한 번에 삭제합니다.
                     - 로그인한 사용자 소유의 책만 삭제할 수 있습니다.
-                    - 요청 본문의 bookIds 배열에 삭제할 book ID 목록을 전달합니다.
+                    - 요청 본문의 bookIds 배열에 삭제할 Book ID 목록을 전달합니다.
+                    - bookIds는 GET /api/books 응답의 items[].bookId 값을 사용하세요.
                     """
     )
     @ApiResponses({
@@ -649,7 +653,7 @@ public interface BookApi {
     })
     @DeleteMapping
     ResponseEntity<ApiResponse<Void>> deleteMyBooks(
-            @Parameter(description = "일괄 삭제할 책 ID 목록", required = true)
+            @Parameter(description = "일괄 삭제할 Book ID 목록 (GET /api/books 응답의 items[].bookId)", required = true)
             @Valid @RequestBody BookBulkDeleteRequest request
     );
 
@@ -873,4 +877,41 @@ public interface BookApi {
             @Parameter(description = "내 책장 항목 ID (personal_book PK)", required = true, example = "100")
             @RequestParam Long personalBookId
     );
+
+    @Operation(
+            summary = "홈화면 읽고 있는 책 탭 카운트 조회",
+            description = """
+            로그인 사용자의 전체 책장 탭 카운트를 조회합니다.
+            - 전체(all): 읽는 중 + 읽기 전 + 완독
+            - 약속 전(before): 읽는 중 + 읽기 전 (미완료 상태)
+            - 약속 후(after): 완독 상태
+            - all = before + after 항상 보장
+            """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "탭 카운트 조회 성공",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = BookReadingTabCountsResponse.class),
+                            examples = @io.swagger.v3.oas.annotations.media.ExampleObject(value = """
+                                    {
+                                      "code": "SUCCESS",
+                                      "message": "읽고 있는 책 탭 카운트 조회 성공",
+                                      "data": {
+                                        "all": 5,
+                                        "before": 3,
+                                        "after": 2
+                                      }
+                                    }
+                                    """))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "서버 오류",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            examples = @io.swagger.v3.oas.annotations.media.ExampleObject(value = """
+                                    {"code": "E000", "message": "서버 에러가 발생했습니다. 담당자에게 문의 바랍니다.", "data": null}
+                                    """)))
+    })
+    @GetMapping("/reading/tab-counts")
+    ResponseEntity<ApiResponse<BookReadingTabCountsResponse>> getBookReadingTabCounts();
 }

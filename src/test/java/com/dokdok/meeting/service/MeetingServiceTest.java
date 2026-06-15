@@ -418,8 +418,8 @@ class MeetingServiceTest {
         MeetingCreateRequest.BookInfo bookInfo = new MeetingCreateRequest.BookInfo(
                 title, authors, publisher, isbn, thumbnail
         );
-        LocalDateTime startDate = LocalDateTime.of(2024, 1, 20, 20, 0);
-        LocalDateTime endDate = LocalDateTime.of(2024, 1, 20, 22, 0);
+        LocalDateTime startDate = LocalDateTime.now().plusDays(3);
+        LocalDateTime endDate = startDate.plusHours(2);
         int memberCount = 5;
         MeetingCreateRequest request = MeetingCreateRequest.builder()
                 .gatheringId(gatheringId)
@@ -432,13 +432,18 @@ class MeetingServiceTest {
 
         User user = User.builder()
                 .id(userId)
+                .nickname("member")
+                .build();
+
+        User leader = User.builder()
+                .id(99L)
                 .nickname("leader")
                 .build();
 
         Gathering gathering = Gathering.builder()
                 .id(gatheringId)
                 .gatheringName("gathering")
-                .gatheringLeader(user)
+                .gatheringLeader(leader)
                 .invitationLink("link")
                 .build();
 
@@ -490,6 +495,103 @@ class MeetingServiceTest {
         }
     }
 
+    @DisplayName("모임장이 약속을 생성하면 별도 승인 없이 자동으로 확정된다.")
+    @Test
+    void givenLeaderCreateRequest_whenCreateMeeting_thenAutoConfirmed() {
+        // given
+        Long gatheringId = 3L;
+        Long leaderId = 7L;
+        String title = "book";
+        String authors = "author";
+        String publisher = "publisher";
+        String isbn = "9781234567890";
+        String thumbnail = "https://example.com/thumb.jpg";
+        MeetingCreateRequest.BookInfo bookInfo = new MeetingCreateRequest.BookInfo(
+                title, authors, publisher, isbn, thumbnail
+        );
+        LocalDateTime startDate = LocalDateTime.now().plusDays(3);
+        LocalDateTime endDate = startDate.plusHours(2);
+        int memberCount = 5;
+        MeetingCreateRequest request = MeetingCreateRequest.builder()
+                .gatheringId(gatheringId)
+                .book(bookInfo)
+                .meetingName(null)
+                .meetingStartDate(startDate)
+                .meetingEndDate(endDate)
+                .maxParticipants(null)
+                .build();
+
+        User leader = User.builder()
+                .id(leaderId)
+                .nickname("leader")
+                .build();
+
+        Gathering gathering = Gathering.builder()
+                .id(gatheringId)
+                .gatheringName("gathering")
+                .gatheringLeader(leader)
+                .invitationLink("link")
+                .build();
+
+        Book book = Book.builder()
+                .id(12L)
+                .bookName(title)
+                .author(authors)
+                .publisher(publisher)
+                .isbn(isbn)
+                .thumbnail(thumbnail)
+                .build();
+
+        Meeting savedMeeting = Meeting.builder()
+                .id(25L)
+                .gathering(gathering)
+                .book(book)
+                .meetingLeader(leader)
+                .meetingName(book.getBookName())
+                .meetingStatus(MeetingStatus.PENDING)
+                .maxParticipants(memberCount)
+                .meetingStartDate(startDate)
+                .meetingEndDate(endDate)
+                .build();
+
+        given(gatheringRepository.findById(gatheringId))
+                .willReturn(Optional.of(gathering));
+        given(gatheringMemberRepository.countByGatheringIdAndRemovedAtIsNull(gatheringId))
+                .willReturn(memberCount);
+        given(bookRepository.findByIsbn(isbn))
+                .willReturn(Optional.of(book));
+        given(userValidator.findUserOrThrow(leaderId))
+                .willReturn(leader);
+        given(meetingRepository.save(any(Meeting.class)))
+                .willReturn(savedMeeting);
+        given(meetingRepository.existsOverlappingMeeting(
+                gathering.getId(),
+                MeetingStatus.CONFIRMED,
+                savedMeeting.getId(),
+                savedMeeting.getMeetingStartDate(),
+                savedMeeting.getMeetingEndDate()
+        ))
+                .willReturn(false);
+        given(meetingMemberRepository.findByMeetingIdAndUserId(savedMeeting.getId(), leaderId))
+                .willReturn(Optional.empty());
+
+        try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
+            securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(leaderId);
+
+            // when
+            MeetingResponse response = meetingService.createMeeting(request);
+
+            // then
+            assertThat(response.meetingStatus()).isEqualTo(MeetingStatus.CONFIRMED);
+            ArgumentCaptor<MeetingMember> meetingMemberCaptor = ArgumentCaptor.forClass(MeetingMember.class);
+            verify(meetingMemberRepository).save(meetingMemberCaptor.capture());
+            MeetingMember savedMember = meetingMemberCaptor.getValue();
+            assertThat(savedMember.getUser().getId()).isEqualTo(leaderId);
+            assertThat(savedMember.getMeetingRole()).isEqualTo(MeetingMemberRole.LEADER);
+            verify(topicService).createDefaultTopic(savedMeeting);
+        }
+    }
+
     @DisplayName("모임을 찾지 못하면 약속 생성 요청이 실패한다.")
     @Test
     void givenMissingGathering_whenCreateMeeting_thenThrowGatheringException() {
@@ -529,8 +631,8 @@ class MeetingServiceTest {
         String publisher = "publisher";
         String isbn = "9781234567890";
         String thumbnail = "https://example.com/thumb.jpg";
-        LocalDateTime startDate = LocalDateTime.of(2024, 1, 20, 20, 0);
-        LocalDateTime endDate = LocalDateTime.of(2024, 1, 20, 22, 0);
+        LocalDateTime startDate = LocalDateTime.now().plusDays(3);
+        LocalDateTime endDate = startDate.plusHours(2);
         MeetingCreateRequest.BookInfo bookInfo = new MeetingCreateRequest.BookInfo(
                 title, authors, publisher, isbn, thumbnail
         );
@@ -594,6 +696,44 @@ class MeetingServiceTest {
         }
     }
 
+    @DisplayName("약속 시작 24시간 이내 일정은 생성 신청할 수 없다.")
+    @Test
+    void givenMeetingWithin24Hours_whenCreateMeeting_thenThrowException() {
+        // given
+        Long gatheringId = 3L;
+        Long userId = 7L;
+        MeetingCreateRequest.BookInfo bookInfo = new MeetingCreateRequest.BookInfo(
+                "book", "author", "publisher", "9781234567890", "https://example.com/thumb.jpg"
+        );
+        MeetingCreateRequest request = MeetingCreateRequest.builder()
+                .gatheringId(gatheringId)
+                .book(bookInfo)
+                .meetingStartDate(LocalDateTime.now().plusHours(23))
+                .meetingEndDate(LocalDateTime.now().plusHours(25))
+                .build();
+        given(gatheringRepository.findById(gatheringId))
+                .willReturn(Optional.of(Gathering.builder()
+                        .id(gatheringId)
+                        .gatheringName("gathering")
+                        .invitationLink("link")
+                        .build()));
+        given(bookRepository.findByIsbn(bookInfo.isbn()))
+                .willReturn(Optional.of(sampleBook()));
+        given(userValidator.findUserOrThrow(userId))
+                .willReturn(User.builder().id(userId).nickname("leader").build());
+
+        try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
+            securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
+
+            // when + then
+            assertThatThrownBy(() -> meetingService.createMeeting(request))
+                    .isInstanceOf(MeetingException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(MeetingErrorCode.MEETING_CREATE_NOT_ALLOWED);
+            verify(meetingRepository, never()).save(any());
+        }
+    }
+
     @DisplayName("모임장이 약속을 확정하면 약속장이 멤버로 포함된다.")
     @Test
     void givenMeetingStatus_whenConfirm_thenMeetingStatusChange() {
@@ -654,7 +794,37 @@ class MeetingServiceTest {
             assertThatThrownBy(() -> meetingService.confirmMeeting(meetingId))
                     .isInstanceOf(MeetingException.class)
                     .extracting("errorCode")
-                    .isEqualTo(MeetingErrorCode.INVALID_MEETING_STATUS_CHANGE);
+                    .isEqualTo(MeetingErrorCode.MEETING_CONFIRM_TIME_CONFLICT);
+        }
+    }
+
+    @DisplayName("약속 시작 24시간 이내의 확정 대기 약속은 승인할 수 없다.")
+    @Test
+    void givenPendingMeetingWithin24Hours_whenConfirm_thenThrowMeetingException() {
+        // given
+        Long meetingId = 1L;
+        Long gatheringLeaderId = 10L;
+        Meeting pendingMeeting = Meeting.builder()
+                .id(meetingId)
+                .meetingName("Meeting 1")
+                .meetingStatus(MeetingStatus.PENDING)
+                .meetingStartDate(LocalDateTime.now().plusHours(23))
+                .meetingEndDate(LocalDateTime.now().plusHours(25))
+                .meetingLeader(leader)
+                .gathering(gathering)
+                .build();
+        given(meetingValidator.findMeetingOrThrow(meetingId)).willReturn(pendingMeeting);
+
+        try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
+            securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(gatheringLeaderId);
+
+            // when + then
+            assertThatThrownBy(() -> meetingService.confirmMeeting(meetingId))
+                    .isInstanceOf(MeetingException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(MeetingErrorCode.MEETING_CONFIRM_NOT_ALLOWED);
+            verify(meetingRepository, never()).existsOverlappingMeeting(any(), any(), any(), any(), any());
+            verify(meetingMemberRepository, never()).save(any());
         }
     }
 
@@ -714,6 +884,66 @@ class MeetingServiceTest {
         }
     }
 
+    @DisplayName("확정 대기 약속은 정상적으로 거절된다.")
+    @Test
+    void givenPendingMeeting_whenReject_thenMeetingStatusChangesToRejected() {
+        // given
+        Long meetingId = 1L;
+        Long gatheringLeaderId = 10L;
+        Meeting pendingMeeting = Meeting.builder()
+                .id(meetingId)
+                .meetingName("Meeting 1")
+                .meetingStatus(MeetingStatus.PENDING)
+                .meetingStartDate(LocalDateTime.now().plusDays(2))
+                .meetingEndDate(LocalDateTime.now().plusDays(2).plusHours(1))
+                .gathering(gathering)
+                .meetingLeader(leader)
+                .build();
+        given(meetingValidator.findMeetingOrThrow(meetingId)).willReturn(pendingMeeting);
+
+        try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
+            securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(gatheringLeaderId);
+
+            // when
+            MeetingStatusResponse response = meetingService.rejectMeeting(meetingId);
+
+            // then
+            assertThat(response.meetingId()).isEqualTo(meetingId);
+            assertThat(response.meetingStatus()).isEqualTo(MeetingStatus.REJECTED);
+            assertThat(response.confirmedAt()).isNull();
+        }
+    }
+
+    @DisplayName("약속 시작 24시간 이내의 확정 대기 약속도 서버 에러 없이 거절된다.")
+    @Test
+    void givenPendingMeetingWithin24Hours_whenReject_thenMeetingStatusChangesToRejected() {
+        // given
+        Long meetingId = 1L;
+        Long gatheringLeaderId = 10L;
+        Meeting pendingMeeting = Meeting.builder()
+                .id(meetingId)
+                .meetingName("Meeting 1")
+                .meetingStatus(MeetingStatus.PENDING)
+                .meetingStartDate(LocalDateTime.now().plusHours(23))
+                .meetingEndDate(LocalDateTime.now().plusHours(24))
+                .gathering(gathering)
+                .meetingLeader(leader)
+                .build();
+        given(meetingValidator.findMeetingOrThrow(meetingId)).willReturn(pendingMeeting);
+
+        try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
+            securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(gatheringLeaderId);
+
+            // when
+            MeetingStatusResponse response = meetingService.rejectMeeting(meetingId);
+
+            // then
+            assertThat(response.meetingId()).isEqualTo(meetingId);
+            assertThat(response.meetingStatus()).isEqualTo(MeetingStatus.REJECTED);
+            assertThat(response.confirmedAt()).isNull();
+        }
+    }
+
     @DisplayName("확정된 약속은 거절할 수 없다.")
     @Test
     void givenConfirmedMeeting_whenReject_thenThrowMeetingException() {
@@ -748,6 +978,9 @@ class MeetingServiceTest {
         Long userId = 7L;
         Meeting meeting = Meeting.builder()
                 .id(meetingId)
+                .meetingStatus(MeetingStatus.CONFIRMED)
+                .meetingStartDate(LocalDateTime.now().plusDays(3))
+                .meetingEndDate(LocalDateTime.now().plusDays(3).plusHours(2))
                 .gathering(Gathering.builder()
                         .id(1L)
                         .gatheringName("gathering")
@@ -762,6 +995,13 @@ class MeetingServiceTest {
 
         given(meetingValidator.findMeetingOrThrow(meetingId))
                 .willReturn(meeting);
+        given(meetingMemberRepository.existsOverlappingConfirmedMeetingByUserId(
+                userId,
+                meetingId,
+                MeetingStatus.CONFIRMED,
+                meeting.getMeetingStartDate(),
+                meeting.getMeetingEndDate()
+        )).willReturn(false);
         given(meetingMemberRepository.findAnyByMeetingIdAndUserId(meetingId, userId))
                 .willReturn(Optional.empty());
         given(userValidator.findUserOrThrow(userId))
@@ -789,6 +1029,9 @@ class MeetingServiceTest {
         Long userId = 7L;
         Meeting meeting = Meeting.builder()
                 .id(meetingId)
+                .meetingStatus(MeetingStatus.CONFIRMED)
+                .meetingStartDate(LocalDateTime.now().plusDays(3))
+                .meetingEndDate(LocalDateTime.now().plusDays(3).plusHours(2))
                 .gathering(Gathering.builder()
                         .id(1L)
                         .gatheringName("gathering")
@@ -799,6 +1042,13 @@ class MeetingServiceTest {
 
         given(meetingValidator.findMeetingOrThrow(meetingId))
                 .willReturn(meeting);
+        given(meetingMemberRepository.existsOverlappingConfirmedMeetingByUserId(
+                userId,
+                meetingId,
+                MeetingStatus.CONFIRMED,
+                meeting.getMeetingStartDate(),
+                meeting.getMeetingEndDate()
+        )).willReturn(false);
         given(meetingMemberRepository.findAnyByMeetingIdAndUserId(meetingId, userId))
                 .willReturn(Optional.of(MeetingMember.builder()
                         .meeting(meeting)
@@ -829,6 +1079,9 @@ class MeetingServiceTest {
         Integer maxParticipants = 5;
         Meeting meeting = Meeting.builder()
                 .id(meetingId)
+                .meetingStatus(MeetingStatus.CONFIRMED)
+                .meetingStartDate(LocalDateTime.now().plusDays(3))
+                .meetingEndDate(LocalDateTime.now().plusDays(3).plusHours(2))
                 .maxParticipants(maxParticipants)
                 .gathering(Gathering.builder()
                         .id(1L)
@@ -845,6 +1098,13 @@ class MeetingServiceTest {
 
         given(meetingValidator.findMeetingOrThrow(meetingId))
                 .willReturn(meeting);
+        given(meetingMemberRepository.existsOverlappingConfirmedMeetingByUserId(
+                userId,
+                meetingId,
+                MeetingStatus.CONFIRMED,
+                meeting.getMeetingStartDate(),
+                meeting.getMeetingEndDate()
+        )).willReturn(false);
         given(meetingMemberRepository.findAnyByMeetingIdAndUserId(meetingId, userId))
                 .willReturn(Optional.of(canceledMember));
 
@@ -871,6 +1131,9 @@ class MeetingServiceTest {
         Long userId = 7L;
         Meeting meeting = Meeting.builder()
                 .id(meetingId)
+                .meetingStatus(MeetingStatus.CONFIRMED)
+                .meetingStartDate(LocalDateTime.now().plusDays(3))
+                .meetingEndDate(LocalDateTime.now().plusDays(3).plusHours(2))
                 .gathering(Gathering.builder()
                         .id(1L)
                         .gatheringName("gathering")
@@ -881,6 +1144,13 @@ class MeetingServiceTest {
 
         given(meetingValidator.findMeetingOrThrow(meetingId))
                 .willReturn(meeting);
+        given(meetingMemberRepository.existsOverlappingConfirmedMeetingByUserId(
+                userId,
+                meetingId,
+                MeetingStatus.CONFIRMED,
+                meeting.getMeetingStartDate(),
+                meeting.getMeetingEndDate()
+        )).willReturn(false);
         doThrow(new GatheringException(GatheringErrorCode.NOT_GATHERING_MEMBER))
                 .when(gatheringValidator).validateMembership(meeting.getGathering().getId(), userId);
 
@@ -903,6 +1173,9 @@ class MeetingServiceTest {
         Long userId = 7L;
         Meeting meeting = Meeting.builder()
                 .id(meetingId)
+                .meetingStatus(MeetingStatus.CONFIRMED)
+                .meetingStartDate(LocalDateTime.now().plusDays(3))
+                .meetingEndDate(LocalDateTime.now().plusDays(3).plusHours(2))
                 .maxParticipants(2)
                 .gathering(Gathering.builder()
                         .id(1L)
@@ -914,6 +1187,13 @@ class MeetingServiceTest {
 
         given(meetingValidator.findMeetingOrThrow(meetingId))
                 .willReturn(meeting);
+        given(meetingMemberRepository.existsOverlappingConfirmedMeetingByUserId(
+                userId,
+                meetingId,
+                MeetingStatus.CONFIRMED,
+                meeting.getMeetingStartDate(),
+                meeting.getMeetingEndDate()
+        )).willReturn(false);
         given(meetingMemberRepository.findAnyByMeetingIdAndUserId(meetingId, userId))
                 .willReturn(Optional.empty());
         doThrow(new MeetingException(MeetingErrorCode.MEETING_FULL))
@@ -938,7 +1218,9 @@ class MeetingServiceTest {
         Long userId = 7L;
         Meeting meeting = Meeting.builder()
                 .id(meetingId)
+                .meetingStatus(MeetingStatus.CONFIRMED)
                 .meetingStartDate(LocalDateTime.now().plusHours(1))
+                .meetingEndDate(LocalDateTime.now().plusHours(2))
                 .gathering(Gathering.builder()
                         .id(1L)
                         .gatheringName("gathering")
@@ -961,6 +1243,80 @@ class MeetingServiceTest {
             verify(gatheringValidator, never()).validateMembership(any(), any());
             verify(meetingValidator, never()).validateCapacity(any(), any());
             verify(userValidator, never()).findUserOrThrow(any());
+            verify(meetingMemberRepository, never()).save(any());
+        }
+    }
+
+    @DisplayName("확정되지 않은 약속은 참가 신청할 수 없다.")
+    @Test
+    void givenPendingMeeting_whenJoinMeeting_thenThrowException() {
+        Long meetingId = 3L;
+        Long userId = 7L;
+        Meeting meeting = Meeting.builder()
+                .id(meetingId)
+                .meetingStatus(MeetingStatus.PENDING)
+                .meetingStartDate(LocalDateTime.now().plusDays(3))
+                .meetingEndDate(LocalDateTime.now().plusDays(3).plusHours(2))
+                .gathering(Gathering.builder()
+                        .id(1L)
+                        .gatheringName("gathering")
+                        .invitationLink("link")
+                        .build())
+                .book(sampleBook())
+                .build();
+
+        given(meetingValidator.findMeetingOrThrow(meetingId)).willReturn(meeting);
+
+        try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
+            securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
+
+            assertThatThrownBy(() -> meetingService.joinMeeting(meetingId))
+                    .isInstanceOf(MeetingException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(MeetingErrorCode.MEETING_JOIN_REQUIRES_CONFIRMED);
+            verify(gatheringValidator, never()).validateMembership(any(), any());
+            verify(meetingMemberRepository, never()).findAnyByMeetingIdAndUserId(any(), any());
+            verify(meetingValidator, never()).validateCapacity(any(), any());
+        }
+    }
+
+    @DisplayName("동일 시간대의 다른 확정 약속에 이미 참가 중이면 참가 신청에 실패한다.")
+    @Test
+    void givenOverlappingMeetingJoined_whenJoinMeeting_thenThrowException() {
+        Long meetingId = 3L;
+        Long userId = 7L;
+        Meeting meeting = Meeting.builder()
+                .id(meetingId)
+                .meetingStatus(MeetingStatus.CONFIRMED)
+                .meetingStartDate(LocalDateTime.now().plusDays(3))
+                .meetingEndDate(LocalDateTime.now().plusDays(3).plusHours(2))
+                .gathering(Gathering.builder()
+                        .id(1L)
+                        .gatheringName("gathering")
+                        .invitationLink("link")
+                        .build())
+                .book(sampleBook())
+                .build();
+
+        given(meetingValidator.findMeetingOrThrow(meetingId)).willReturn(meeting);
+        given(meetingMemberRepository.existsOverlappingConfirmedMeetingByUserId(
+                userId,
+                meetingId,
+                MeetingStatus.CONFIRMED,
+                meeting.getMeetingStartDate(),
+                meeting.getMeetingEndDate()
+        )).willReturn(true);
+
+        try (MockedStatic<SecurityUtil> securityUtilMock = mockStatic(SecurityUtil.class)) {
+            securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
+
+            assertThatThrownBy(() -> meetingService.joinMeeting(meetingId))
+                    .isInstanceOf(MeetingException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(MeetingErrorCode.MEETING_JOIN_TIME_CONFLICT);
+            verify(gatheringValidator, never()).validateMembership(any(), any());
+            verify(meetingMemberRepository, never()).findAnyByMeetingIdAndUserId(any(), any());
+            verify(meetingValidator, never()).validateCapacity(any(), any());
             verify(meetingMemberRepository, never()).save(any());
         }
     }
@@ -1249,9 +1605,9 @@ class MeetingServiceTest {
 
         List<Meeting> meetings = List.of(meeting1, meeting2);
         Page<Meeting> meetingPage = new PageImpl<>(meetings, pageable, meetings.size());
-        given(meetingRepository.findByGatheringIdAndMeetingStatus(
+        given(meetingRepository.findByGatheringIdAndMeetingStatusIn(
                 eq(gatheringId),
-                eq(MeetingStatus.CONFIRMED),
+                eq(List.of(MeetingStatus.CONFIRMED, MeetingStatus.DONE)),
                 any()
         )).willReturn(meetingPage);
         given(topicRepository.findTopicTypesByMeetingIds(List.of(1L, 2L)))
@@ -1262,6 +1618,10 @@ class MeetingServiceTest {
                 ));
         given(meetingMemberRepository.findActiveMeetingIdsByUserIdAndGatheringId(userId, gatheringId))
                 .willReturn(List.of(1L));
+        given(topicAnswerRepository.findMeetingIdsWithSubmittedAnswers(List.of(1L, 2L), userId))
+                .willReturn(List.of());
+        given(personalRetrospectiveRepository.findMeetingIdsWithRetrospective(List.of(1L, 2L), userId))
+                .willReturn(List.of());
 
         try (MockedStatic<SecurityUtil> mock = mockStatic(SecurityUtil.class)) {
             mock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
@@ -1399,14 +1759,15 @@ class MeetingServiceTest {
         // given
         Long gatheringId = 100L;
         Long userId = 55L;
-        given(meetingRepository.countByGatheringIdAndMeetingStatus(gatheringId, MeetingStatus.CONFIRMED))
-                .willReturn(3);
+        given(meetingRepository.countByGatheringIdAndMeetingStatusIn(
+                gatheringId, List.of(MeetingStatus.CONFIRMED, MeetingStatus.DONE)))
+                .willReturn(5);
         given(meetingRepository.countByGatheringIdAndMeetingStatus(gatheringId, MeetingStatus.DONE))
                 .willReturn(2);
-        given(meetingRepository.countUpcomingMeetings(eq(gatheringId), eq(MeetingStatus.CONFIRMED), any(), any()))
-                .willReturn(1);
-        given(meetingMemberRepository.countMeetingsByUserIdAndStatus(userId, gatheringId, MeetingStatus.DONE))
-                .willReturn(1);
+        given(meetingRepository.countByGatheringIdAndMeetingStatus(gatheringId, MeetingStatus.CONFIRMED))
+                .willReturn(3);
+        given(meetingMemberRepository.countMeetingsByUserIdAndGatheringId(userId, gatheringId))
+                .willReturn(4);
 
         try (MockedStatic<SecurityUtil> mock = mockStatic(SecurityUtil.class)) {
             mock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
@@ -1415,16 +1776,10 @@ class MeetingServiceTest {
             MeetingTabCountsResponse response = meetingService.getMeetingTabCounts(gatheringId);
 
             // then
-            assertThat(response.all()).isEqualTo(3);
-            assertThat(response.upcoming()).isEqualTo(1);
+            assertThat(response.all()).isEqualTo(5);
+            assertThat(response.upcoming()).isEqualTo(3);
             assertThat(response.done()).isEqualTo(2);
-            assertThat(response.joined()).isEqualTo(1);
-            verify(meetingRepository).countUpcomingMeetings(
-                    eq(gatheringId),
-                    eq(MeetingStatus.CONFIRMED),
-                    any(LocalDateTime.class),
-                    any(LocalDateTime.class)
-            );
+            assertThat(response.joined()).isEqualTo(4);
         }
     }
 
@@ -1516,7 +1871,71 @@ class MeetingServiceTest {
         }
     }
 
-    @DisplayName("내 약속 탭 카운트를 조회하면 전체/다가오는/완료 카운트를 반환한다.")
+    @DisplayName("내 약속 리스트 조회 시 사전 의견/개인 회고 작성 완료 여부를 약속별로 반환한다.")
+    @Test
+    void givenWriteStatus_whenGetMyMeetingList_thenReturnHasPreOpinionAndRetrospective() {
+        // given
+        Long userId = 55L;
+        int size = 4;
+        Meeting written = Meeting.builder()
+                .id(1L)
+                .meetingName("written")
+                .meetingStatus(MeetingStatus.DONE)
+                .meetingLeader(leader)
+                .gathering(gathering)
+                .book(Book.builder().id(1L).bookName("book1").build())
+                .build();
+        Meeting notWritten = Meeting.builder()
+                .id(2L)
+                .meetingName("notWritten")
+                .meetingStatus(MeetingStatus.DONE)
+                .meetingLeader(leader)
+                .gathering(gathering)
+                .book(Book.builder().id(2L).bookName("book2").build())
+                .build();
+
+        given(meetingMemberRepository.findMyMeetingsByStatusesAfterCursor(
+                eq(userId),
+                eq(List.of(MeetingStatus.CONFIRMED, MeetingStatus.DONE)),
+                any(),
+                any(),
+                any()
+        )).willReturn(List.of(written, notWritten));
+        given(topicRepository.findMeetingIdsWithConfirmedTopics(List.of(1L, 2L)))
+                .willReturn(List.of());
+        // 1번 약속만 사전 의견 제출 완료
+        given(topicAnswerRepository.findMeetingIdsWithSubmittedAnswers(List.of(1L, 2L), userId))
+                .willReturn(List.of(1L));
+        // 1번 약속만 개인 회고 작성 완료
+        given(personalRetrospectiveRepository.findMeetingIdsWithRetrospective(List.of(1L, 2L), userId))
+                .willReturn(List.of(1L));
+
+        try (MockedStatic<SecurityUtil> mock = mockStatic(SecurityUtil.class)) {
+            mock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
+
+            // when
+            CursorResponse<MyMeetingListItemResponse, MeetingListCursor> response =
+                    meetingService.getMyMeetingList(null, size, null);
+
+            // then
+            assertThat(response.items()).hasSize(2);
+            MyMeetingListItemResponse writtenItem = response.items().stream()
+                    .filter(item -> item.meetingId().equals(1L))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(writtenItem.hasPreOpinion()).isTrue();
+            assertThat(writtenItem.hasPersonalRetrospective()).isTrue();
+
+            MyMeetingListItemResponse notWrittenItem = response.items().stream()
+                    .filter(item -> item.meetingId().equals(2L))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(notWrittenItem.hasPreOpinion()).isFalse();
+            assertThat(notWrittenItem.hasPersonalRetrospective()).isFalse();
+        }
+    }
+
+    @DisplayName("내 약속 탭 카운트를 조회하면 전체/다가오는/완료 카운트를 반환한다. (다가오는 = 3일 이내 확정 약속, 리스트와 동일 기준)")
     @Test
     void givenUser_whenGetMyMeetingTabCounts_thenReturnCounts() {
         // given
@@ -1525,11 +1944,12 @@ class MeetingServiceTest {
                 userId,
                 List.of(MeetingStatus.CONFIRMED, MeetingStatus.DONE)
         )).willReturn(5);
+        // 다가오는 탭 카운트는 리스트와 동일하게 now ~ now+3일 범위의 확정 약속만 세야 한다.
         given(meetingMemberRepository.countMyUpcomingMeetings(
                 eq(userId),
                 eq(MeetingStatus.CONFIRMED),
-                any(),
-                any()
+                any(LocalDateTime.class),
+                any(LocalDateTime.class)
         )).willReturn(2);
         given(meetingMemberRepository.countMyMeetingsByStatusWithoutPersonalRetrospective(
                 userId,

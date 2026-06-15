@@ -21,7 +21,8 @@ public enum GatheringErrorCode implements BaseErrorCode {
     INVALID_INVITATION_LINK("GA010", "초대링크는 필수입니다.", HttpStatus.BAD_REQUEST),
     NOT_PENDING_STATUS("GA011", "대기 중인 가입 요청만 처리할 수 있습니다.", HttpStatus.BAD_REQUEST),
     INVALID_APPROVE_TYPE("GA012", "승인 상태는 ACTIVE 또는 REJECTED만 가능합니다.", HttpStatus.BAD_REQUEST),
-    FAVORITE_LIMIT_EXCEEDED("GA013", "즐겨찾기는 최대 4개까지만 등록할 수 있습니다.", HttpStatus.BAD_REQUEST);
+    FAVORITE_LIMIT_EXCEEDED("GA013", "즐겨찾기는 최대 4개까지만 등록할 수 있습니다.", HttpStatus.BAD_REQUEST),
+    REMOVED_MEMBER_CANNOT_REJOIN("GA014", "강퇴된 모임에는 재가입할 수 없습니다.", HttpStatus.FORBIDDEN);
 
     private final String code;
     private final String message;

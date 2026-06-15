@@ -35,6 +35,16 @@ public interface TopicAnswerRepository extends JpaRepository<TopicAnswer, Long> 
     boolean existsByMeetingIdAndUserId(@Param("meetingId") Long meetingId,
                                        @Param("userId") Long userId);
 
+    @Query("""
+            SELECT DISTINCT t.meeting.id
+            FROM TopicAnswer ta
+            JOIN ta.topic t
+            WHERE t.meeting.id IN :meetingIds
+            AND ta.user.id = :userId
+            AND ta.isSubmitted = true
+            """)
+    List<Long> findMeetingIdsWithSubmittedAnswers(@Param("meetingIds") List<Long> meetingIds,
+                                                  @Param("userId") Long userId);
 
     @Query("""
                     SELECT ta
@@ -42,6 +52,7 @@ public interface TopicAnswerRepository extends JpaRepository<TopicAnswer, Long> 
                     JOIN FETCH ta.topic t
                     WHERE t.meeting.id = :meetingId
                     AND ta.user.id = :userId
+                    AND ta.deletedAt IS NULL
                     ORDER BY t.id
             """)
     List<TopicAnswer> findByMeetingIdUserId(Long meetingId, Long userId);
@@ -93,6 +104,16 @@ public interface TopicAnswerRepository extends JpaRepository<TopicAnswer, Long> 
             """
     )
     List<TopicAnswer> findByMeetingId(Long meetingId);
+
+    @Query("""
+                    SELECT ta
+                    FROM TopicAnswer ta
+                    JOIN FETCH ta.user u
+                    JOIN FETCH ta.topic t
+                    WHERE t.meeting.id = :meetingId
+                    AND ta.isSubmitted = false
+            """)
+    List<TopicAnswer> findDraftsByMeetingId(@Param("meetingId") Long meetingId);
 
     @Query("""
         SELECT ta

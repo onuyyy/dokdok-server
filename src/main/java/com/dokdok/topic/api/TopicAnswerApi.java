@@ -31,9 +31,10 @@ public interface TopicAnswerApi {
     @Operation(
             summary = "토픽 답변 일괄 저장 (developer: 양재웅)",
             description = """
-            토픽 답변과 책 평가를 일괄 저장합니다.
+            토픽 답변과 사전의견 전용 책 평가를 임시 저장합니다.
             - 권한: 모임 구성원
             - 제약: 제출 완료된 답변은 수정 불가
+            - 책 평가는 사전의견 작성 화면에만 저장되며, 내 책장 리뷰에는 반영되지 않습니다.
             """,
             parameters = {
                     @Parameter(name = "gatheringId", description = "모임 식별자", in = ParameterIn.PATH, required = true),
@@ -88,6 +89,7 @@ public interface TopicAnswerApi {
             description = """
             현재 로그인 사용자의 사전 의견 작성 화면 정보를 조회합니다.
             - 권한: 모임 구성원
+            - review는 내 책장 리뷰가 아니라 사전의견 전용 책 평가입니다.
             """,
             parameters = {
                     @Parameter(name = "gatheringId", description = "모임 식별자", in = ParameterIn.PATH, required = true),
@@ -129,9 +131,10 @@ public interface TopicAnswerApi {
     @Operation(
             summary = "토픽 답변 일괄 저장 (developer: 양재웅)",
             description = """
-            현재 로그인 사용자의 토픽 답변과 책 평가를 일괄 저장합니다.
+            현재 로그인 사용자의 토픽 답변과 사전의견 전용 책 평가를 임시 저장합니다.
             - 권한: 모임 구성원
             - 제약: 제출 완료된 답변은 수정 불가
+            - 책 평가는 사전의견 작성 화면에만 저장되며, 내 책장 리뷰에는 반영되지 않습니다.
             """,
             parameters = {
                     @Parameter(name = "gatheringId", description = "모임 식별자", in = ParameterIn.PATH, required = true),
@@ -182,11 +185,13 @@ public interface TopicAnswerApi {
     );
 
     @Operation(
-            summary = "토픽 답변 일괄 제출 (developer: 양재웅)",
+            summary = "토픽 답변 일괄 제출/공유 (developer: 양재웅)",
             description = """
-            현재 로그인 사용자의 토픽 답변과 책 평가를 일괄 제출합니다.
+            현재 로그인 사용자의 토픽 답변을 제출하고 책 평가를 공유합니다.
             - 권한: 모임 구성원
             - 제약: 제출 완료된 답변은 재제출 불가
+            - 책 평가는 사전의견 전용 저장소에 저장된 뒤, 실제 내 책장 리뷰에도 반영됩니다.
+            - 응답의 reviewId는 사전의견 전용 책 평가 ID입니다.
             """,
             parameters = {
                     @Parameter(name = "gatheringId", description = "모임 식별자", in = ParameterIn.PATH, required = true),

@@ -31,16 +31,19 @@ public record TopicsWithActionsResponse(
         Actions actions
 ) {
 
-    @Schema(description = "사용자 권한 정보")
+    @Schema(name = "TopicActions", description = "사용자 권한 정보")
     public record Actions(
             @Schema(description = "주제 확정 가능 여부", example = "true")
             Boolean canConfirm,
 
             @Schema(description = "주제 제안 가능 여부", example = "true")
-            Boolean canSuggest
+            Boolean canSuggest,
+
+            @Schema(description = "좋아요 가능 여부 (약속 참가 신청 완료한 멤버만 가능)", example = "true")
+            Boolean canLike
     ) {
-        public static Actions of(Boolean canConfirm, Boolean canSuggest) {
-            return new Actions(canConfirm, canSuggest);
+        public static Actions of(Boolean canConfirm, Boolean canSuggest, Boolean canLike) {
+            return new Actions(canConfirm, canSuggest, canLike);
         }
     }
 

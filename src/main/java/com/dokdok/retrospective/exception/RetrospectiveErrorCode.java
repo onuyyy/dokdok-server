@@ -17,7 +17,8 @@ public enum RetrospectiveErrorCode implements BaseErrorCode {
     SUMMARY_NOT_FOUND("R106", "AI 요약을 찾을 수 없습니다.", HttpStatus.NOT_FOUND),
     NOT_AUTHOR_OF_RETROSPECTIVE("R107", "사용자가 작성한 회고가 아닙니다.", HttpStatus.FORBIDDEN),
     RETROSPECTIVE_ALREADY_PUBLISHED("R108", "이미 약속 회고가 생성되었습니다.", HttpStatus.CONFLICT),
-    RETROSPECTIVE_NOT_PUBLISHED("R109", "약속 회고가 아직 생성되지 않았습니다.", HttpStatus.FORBIDDEN);
+    RETROSPECTIVE_NOT_PUBLISHED("R109", "약속 회고가 아직 생성되지 않았습니다.", HttpStatus.FORBIDDEN),
+    RETROSPECTIVE_CONTENT_EMPTY("R110", "회고 내용을 하나 이상 작성해야 합니다.", HttpStatus.BAD_REQUEST);
 
 
     private final String code;

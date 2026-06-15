@@ -2,10 +2,6 @@ package com.dokdok.topic.service;
 
 import com.dokdok.book.dto.request.BookReviewRequest;
 import com.dokdok.book.dto.response.BookReviewResponse;
-import com.dokdok.book.exception.BookErrorCode;
-import com.dokdok.book.exception.BookException;
-import com.dokdok.book.repository.BookReviewRepository;
-import com.dokdok.book.service.BookReviewService;
 import com.dokdok.gathering.service.GatheringValidator;
 import com.dokdok.global.util.SecurityUtil;
 import com.dokdok.meeting.service.MeetingValidator;
@@ -39,8 +35,7 @@ public class TopicAnswerService {
 
     private final TopicAnswerRepository topicAnswerRepository;
     private final TopicRepository topicRepository;
-    private final BookReviewRepository bookReviewRepository;
-    private final BookReviewService bookReviewService;
+    private final PreOpinionBookReviewService preOpinionBookReviewService;
     private final GatheringValidator gatheringValidator;
     private final MeetingValidator meetingValidator;
 
@@ -89,10 +84,7 @@ public class TopicAnswerService {
         TopicAnswerDetailResponse.BookInfo bookInfo = TopicAnswerDetailResponse.BookInfo.from(meeting.getBook());
         BookReviewResponse reviewResponse = null;
         if (meeting.getBook() != null) {
-            Long bookId = meeting.getBook().getId();
-            reviewResponse = bookReviewRepository.findByBookIdAndUserId(bookId, userId)
-                    .map(BookReviewResponse::from)
-                    .orElse(null);
+            reviewResponse = preOpinionBookReviewService.findMyReview(meetingId);
         }
         TopicAnswerDetailResponse.PreOpinion preOpinion =
                 new TopicAnswerDetailResponse.PreOpinion(latestUpdatedAt, topicInfos);
@@ -130,8 +122,10 @@ public class TopicAnswerService {
         meetingValidator.validateMeetingMember(meetingId, userId);
 
         Map<Long, String> contentsByTopicId = new LinkedHashMap<>();
-        for (TopicAnswerBulkSaveRequest.AnswerItem item : request.answers()) {
-            contentsByTopicId.put(item.topicId(), item.content());
+        if (request.answers() != null) {
+            for (TopicAnswerBulkSaveRequest.AnswerItem item : request.answers()) {
+                contentsByTopicId.put(item.topicId(), item.content());
+            }
         }
 
         List<Long> topicIds = List.copyOf(contentsByTopicId.keySet());
@@ -204,6 +198,7 @@ public class TopicAnswerService {
         }
 
         BookReviewResponse reviewResponse = upsertReview(meetingId, request.review());
+        preOpinionBookReviewService.applyToPersonalBookReview(meetingId, request.review());
 
         List<TopicAnswerSubmitResponse> responses = topicIds.stream()
                 .map(topicId -> {
@@ -217,17 +212,7 @@ public class TopicAnswerService {
     }
 
     private BookReviewResponse upsertReview(Long meetingId, BookReviewRequest request) {
-        Long userId = SecurityUtil.getCurrentUserId();
-        var meeting = meetingValidator.findMeetingOrThrow(meetingId);
-        Long bookId = meeting.getBook() != null ? meeting.getBook().getId() : null;
-        if (bookId == null) {
-            throw new BookException(BookErrorCode.BOOK_NOT_FOUND);
-        }
-
-        boolean exists = bookReviewRepository.findByBookIdAndUserId(bookId, userId).isPresent();
-        return exists
-                ? bookReviewService.updateMyReview(bookId, request)
-                : bookReviewService.createReview(bookId, request);
+        return preOpinionBookReviewService.upsertReview(meetingId, request);
     }
 
 }

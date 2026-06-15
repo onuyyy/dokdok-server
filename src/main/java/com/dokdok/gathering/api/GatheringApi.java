@@ -153,6 +153,7 @@ public interface GatheringApi {
               초대링크를 통해 모임에 가입을 요청합니다.
               - 가입 요청 후 모임장의 승인을 기다려야 합니다.
               - 이미 가입된 모임이거나 가입 요청 중인 경우 실패합니다.
+              - 강퇴(내보내기)된 이력이 있는 모임에는 재가입할 수 없습니다.
               ENUM
               - memberStatus: PENDING(가입요청), ACTIVE(가입승인), REJECTED(가입거절)
               """
@@ -186,6 +187,16 @@ public interface GatheringApi {
                             mediaType = MediaType.APPLICATION_JSON_VALUE,
                             examples = @ExampleObject(value = """
                                     {"code": "G102", "message": "인증이 필요합니다.", "data": null}
+                                    """)
+                    )
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403",
+                    description = "강퇴된 모임에는 재가입할 수 없음",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            examples = @ExampleObject(value = """
+                                    {"code": "GA014", "message": "강퇴된 모임에는 재가입할 수 없습니다.", "data": null}
                                     """)
                     )
             ),

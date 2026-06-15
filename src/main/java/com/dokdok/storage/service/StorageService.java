@@ -57,7 +57,7 @@ public class StorageService {
 
 			return fileName;
 		} catch (Exception e) {
-            log.debug("파일 업로드 실패 {}", e.getMessage());
+            log.error("프로필 이미지 업로드 실패 (object={}): {}", fileName, e.getMessage(), e);
 			throw new StorageException(StorageErrorCode.FILE_UPLOAD_FAILED, e);
 		}
 	}

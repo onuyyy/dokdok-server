@@ -36,13 +36,6 @@ public class BookValidator {
         }
     }
 
-    // 동일 사용자/책 리뷰 중복 생성을 막습니다.
-    public void validateReviewNotExists(Long bookId, Long userId) {
-        if (bookReviewRepository.existsByBookIdAndUserId(bookId, userId)) {
-            throw new BookException(BookErrorCode.BOOK_REVIEW_ALREADY_EXISTS);
-        }
-    }
-
     public PersonalBook validateInBookShelf(Long userId, Long bookId) {
         return personalBookRepository.findTopByUserIdAndBookIdAndGatheringIsNullOrderByAddedAtDesc(userId, bookId)
                 .orElseThrow(() -> new BookException(BookErrorCode.BOOK_NOT_IN_SHELF));

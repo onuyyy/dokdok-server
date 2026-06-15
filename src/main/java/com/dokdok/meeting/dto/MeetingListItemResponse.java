@@ -39,6 +39,12 @@ public record MeetingListItemResponse(
         MeetingMyRole myRole,
 
         @Schema(description = "약속 상태", example = "CONFIRMED")
-        MeetingStatus meetingStatus
+        MeetingStatus meetingStatus,
+
+        @Schema(description = "내가 해당 약속의 사전답변을 제출했는지 여부", example = "true")
+        boolean hasPreOpinion,
+
+        @Schema(description = "내가 해당 약속의 개인 회고를 작성했는지 여부", example = "false")
+        boolean hasPersonalRetrospective
 ) {
 }

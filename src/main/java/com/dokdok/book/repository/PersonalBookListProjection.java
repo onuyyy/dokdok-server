@@ -5,6 +5,7 @@ import com.dokdok.book.entity.BookReadingStatus;
 import java.math.BigDecimal;
 
 public interface PersonalBookListProjection {
+    Long getPersonalBookId();
     Long getBookId();
     String getTitle();
     String getPublisher();
@@ -14,4 +15,5 @@ public interface PersonalBookListProjection {
     BigDecimal getRating();
     String getGatherings();
     java.time.LocalDateTime getAddedAt();
+    String getMeetingProgressStatus();
 }

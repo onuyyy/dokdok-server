@@ -4,6 +4,8 @@ import com.dokdok.book.dto.request.BookCreateRequest;
 import com.dokdok.book.dto.request.PersonalBookSortBy;
 import com.dokdok.book.dto.request.PersonalBookSortOrder;
 import com.dokdok.book.dto.response.BookListCursor;
+import com.dokdok.book.dto.response.BookReadingTabCountsResponse;
+import com.dokdok.book.entity.BookMeetingProgressStatus;
 import com.dokdok.book.dto.response.PersonalBookCursorPageResponse;
 import com.dokdok.book.dto.response.PersonalBookCreateResponse;
 import com.dokdok.book.dto.response.PersonalBookDetailResponse;
@@ -16,6 +18,7 @@ import com.dokdok.book.exception.BookErrorCode;
 import com.dokdok.book.exception.BookException;
 import com.dokdok.book.repository.BookRepository;
 import com.dokdok.book.repository.PersonalBookListProjection;
+import com.dokdok.book.repository.BookReviewRepository;
 import com.dokdok.book.repository.PersonalBookRepository;
 import com.dokdok.book.repository.PersonalBookStatusCountProjection;
 import com.dokdok.gathering.entity.Gathering;
@@ -46,6 +49,7 @@ public class PersonalBookService {
     private final BookRepository bookRepository;
     private final UserValidator userValidator;
     private final BookValidator bookValidator;
+    private final BookReviewRepository bookReviewRepository;
 
     // 생성
     @Transactional
@@ -114,7 +118,8 @@ public class PersonalBookService {
             BigDecimal cursorRating,
             OffsetDateTime cursorAddedAt,
             Long cursorBookId,
-            Integer size
+            Integer size,
+            BookMeetingProgressStatus meetingProgressStatus
     ) {
         User userEntity = userValidator.findUserOrThrow(SecurityUtil.getCurrentUserId());
         String readingStatus = bookReadingStatus != null ? bookReadingStatus.name() : null;
@@ -132,6 +137,8 @@ public class PersonalBookService {
                 )
                 .stream()
                 .filter(item -> isWithinRatingRange(item.getRating(), minRating, maxRating))
+                .filter(item -> meetingProgressStatus == null
+                        || meetingProgressStatus.name().equals(item.getMeetingProgressStatus()))
                 .toList();
 
         List<PersonalBookListProjection> sorted = filtered.stream()
@@ -166,9 +173,9 @@ public class PersonalBookService {
     }
 
     public PersonalBookDetailResponse getPersonalBook(Long bookId) {
-        User userEntity = userValidator.findUserOrThrow(SecurityUtil.getCurrentUserId());
-        // 책 정보 GET Logic
-        PersonalBook entity = bookValidator.validateInBookShelf(userEntity.getId(), bookId);
+        Long userId = SecurityUtil.getCurrentUserId();
+        PersonalBook entity = personalBookRepository.findTopByUserIdAndBookIdOrderByAddedAtDesc(userId, bookId)
+                .orElseThrow(() -> new BookException(BookErrorCode.BOOK_NOT_IN_SHELF));
 
         return PersonalBookDetailResponse.from(entity);
     }
@@ -177,23 +184,43 @@ public class PersonalBookService {
     public void deleteBook(Long bookId) {
         User userEntity = userValidator.findUserOrThrow(SecurityUtil.getCurrentUserId());
 
-        PersonalBook personalBook = bookValidator.validateInBookShelf(userEntity.getId(), bookId);
+        PersonalBook personalBook = personalBookRepository
+                .findTopByUserIdAndBookIdOrderByAddedAtDesc(userEntity.getId(), bookId)
+                .orElseThrow(() -> new BookException(BookErrorCode.BOOK_NOT_IN_SHELF));
 
         personalBookRepository.delete(personalBook);
+        bookReviewRepository.findByBookIdAndUserId(bookId, userEntity.getId())
+                .ifPresent(review -> review.deleteReview());
     }
 
     @Transactional
     public void deleteBooks(List<Long> bookIds) {
         User userEntity = userValidator.findUserOrThrow(SecurityUtil.getCurrentUserId());
 
-        List<Long> distinctBookIds = bookIds.stream()
+        List<Long> distinctIds = bookIds.stream()
                 .distinct()
                 .toList();
 
-        for (Long bookId : distinctBookIds) {
-            PersonalBook personalBook = bookValidator.validateInBookShelf(userEntity.getId(), bookId);
+        for (Long bookId : distinctIds) {
+            PersonalBook personalBook = personalBookRepository
+                    .findTopByUserIdAndBookIdOrderByAddedAtDesc(userEntity.getId(), bookId)
+                    .orElseThrow(() -> new BookException(BookErrorCode.BOOK_NOT_IN_SHELF));
             personalBookRepository.delete(personalBook);
+            bookReviewRepository.findByBookIdAndUserId(bookId, userEntity.getId())
+                    .ifPresent(review -> review.deleteReview());
         }
+    }
+
+    public BookReadingTabCountsResponse getBookReadingTabCounts() {
+        Long userId = SecurityUtil.getCurrentUserId();
+        PersonalBookStatusCountsResponse counts = buildStatusCounts(userId, null);
+        long before = counts.reading() + counts.pending();
+        long after = counts.completed();
+        return BookReadingTabCountsResponse.builder()
+                .all(counts.total())
+                .before(before)
+                .after(after)
+                .build();
     }
 
     /**
@@ -325,12 +352,18 @@ public class PersonalBookService {
     }
 
     private record CursorProjection(
+            Long personalBookId,
             Long bookId,
             LocalDateTime addedAt,
             BigDecimal rating
     ) implements PersonalBookListProjection {
         private static CursorProjection of(Long bookId, LocalDateTime addedAt, BigDecimal rating) {
-            return new CursorProjection(bookId, addedAt, rating);
+            return new CursorProjection(null, bookId, addedAt, rating);
+        }
+
+        @Override
+        public Long getPersonalBookId() {
+            return personalBookId;
         }
 
         @Override
@@ -375,6 +408,11 @@ public class PersonalBookService {
 
         @Override
         public String getGatherings() {
+            return null;
+        }
+
+        @Override
+        public String getMeetingProgressStatus() {
             return null;
         }
     }

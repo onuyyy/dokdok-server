@@ -1,3 +1,4 @@
+
 # DokDok API 에러코드 문서
 
 ## Global 에러코드
@@ -104,6 +105,7 @@
 | GA011 | NOT_PENDING_STATUS | 대기 중인 가입 요청만 처리할 수 있습니다. | 400 |
 | GA012 | INVALID_APPROVE_TYPE | 승인 상태는 ACTIVE 또는 REJECTED만 가능합니다. | 400 |
 | GA013 | FAVORITE_LIMIT_EXCEEDED | 즐겨찾기는 최대 4개까지만 등록할 수 있습니다. | 400 |
+| GA014 | REMOVED_MEMBER_CANNOT_REJOIN | 강퇴된 모임에는 재가입할 수 없습니다. | 403 |
 
 ---
 
@@ -130,6 +132,11 @@
 | M017 | MEETING_UPDATE_NOT_ALLOWED | 약속 시작 24시간 이내에는 수정할 수 없습니다. | 400 |
 | M018 | MEETING_NOT_CONFIRMED | 약속이 확정된 경우에만 주제를 제안할 수 있습니다. | 400 |
 | M019 | MEETING_DATE_REQUIRED | 약속 시작/종료 일시는 필수입니다. | 400 |
+| M020 | MEETING_JOIN_REQUIRES_CONFIRMED | 확정된 약속만 참가 신청할 수 있습니다. | 400 |
+| M021 | MEETING_JOIN_TIME_CONFLICT | 동일 시간대의 다른 약속에 이미 참가 중입니다. | 400 |
+| M022 | MEETING_CREATE_NOT_ALLOWED | 약속 시작 24시간 이내의 일정은 신청할 수 없습니다. | 400 |
+| M023 | MEETING_CONFIRM_NOT_ALLOWED | 약속 시작 24시간 이내의 일정은 승인할 수 없습니다. | 400 |
+| M024 | MEETING_CONFIRM_TIME_CONFLICT | 모임 내 같은 시간대에 이미 확정된 약속이 있어 승인할 수 없습니다. | 400 |
 
 ---
 

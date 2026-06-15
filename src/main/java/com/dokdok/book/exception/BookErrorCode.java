@@ -18,7 +18,8 @@ public enum BookErrorCode implements BaseErrorCode {
     KEYWORD_NOT_SELECTABLE("B007", "선택할 수 없는 키워드입니다.", HttpStatus.BAD_REQUEST),
     BOOK_REVIEW_INVALID_RATING("B008", "별점은 0.5 단위의 5점 만점 값이어야 합니다.", HttpStatus.BAD_REQUEST),
     BOOK_REVIEW_DELETED("B009", "삭제된 책 리뷰입니다.", HttpStatus.BAD_REQUEST),
-    BOOK_REVIEW_ACCESS_DENIED_NOT_WRITTEN("B010", "평가를 작성한 사용자만 조회할 수 있습니다.", HttpStatus.FORBIDDEN);
+    BOOK_REVIEW_ACCESS_DENIED_NOT_WRITTEN("B010", "평가를 작성한 사용자만 조회할 수 있습니다.", HttpStatus.FORBIDDEN),
+    BOOK_REVIEW_NO_CHANGES("B011", "변경된 내용이 없습니다.", HttpStatus.BAD_REQUEST);
 
     private final String code;
     private final String message;

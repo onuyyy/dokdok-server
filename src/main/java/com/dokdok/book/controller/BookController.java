@@ -6,6 +6,7 @@ import com.dokdok.book.dto.request.BookCreateRequest;
 import com.dokdok.book.dto.request.PersonalBookSortBy;
 import com.dokdok.book.dto.request.PersonalBookSortOrder;
 import com.dokdok.book.dto.response.*;
+import com.dokdok.book.entity.BookMeetingProgressStatus;
 import com.dokdok.book.entity.BookReadingStatus;
 import com.dokdok.book.service.BookService;
 import com.dokdok.book.service.PersonalBookService;
@@ -60,7 +61,8 @@ public class BookController implements BookApi {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
             OffsetDateTime cursorAddedAt,
             @RequestParam(required = false) Long cursorBookId,
-            @RequestParam(required = false) Integer size
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) BookMeetingProgressStatus meetingProgressStatus
     ) {
         PersonalBookCursorPageResponse response = personalBookService
                 .getPersonalBookListCursor(
@@ -73,7 +75,8 @@ public class BookController implements BookApi {
                         cursorRating,
                         cursorAddedAt,
                         cursorBookId,
-                        size
+                        size,
+                        meetingProgressStatus
                 );
         return ApiResponse.success(response, "책 리스트 조회 성공");
     }
@@ -112,5 +115,11 @@ public class BookController implements BookApi {
     public ResponseEntity<ApiResponse<PersonalBookDetailResponse>> updateReadingBook(Long bookId, Long personalBookId) {
         PersonalBookDetailResponse personalBook = personalBookService.updateReadingStatus(personalBookId);
         return ApiResponse.success(personalBook, "읽는 상태 업데이트 성공");
+    }
+
+    @Override
+    @GetMapping("/reading/tab-counts")
+    public ResponseEntity<ApiResponse<BookReadingTabCountsResponse>> getBookReadingTabCounts() {
+        return ApiResponse.success(personalBookService.getBookReadingTabCounts(), "읽고 있는 책 탭 카운트 조회 성공");
     }
 }

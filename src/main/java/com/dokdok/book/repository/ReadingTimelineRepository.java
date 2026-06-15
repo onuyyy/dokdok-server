@@ -1,5 +1,7 @@
 package com.dokdok.book.repository;
 
+import com.dokdok.book.dto.request.TimelineSortType;
+import com.dokdok.book.entity.RecordType;
 import com.dokdok.book.repository.dto.ReadingTimelineIndexRow;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -22,11 +24,18 @@ public class ReadingTimelineRepository {
             Long bookId,
             Long gatheringId,
             String preOpinionTime,
+            RecordType recordType,
+            TimelineSortType sort,
             LocalDateTime cursorEventAt,
             Integer cursorTypeOrder,
             Long cursorSourceId,
             int limit
     ) {
+        String dir = sort == TimelineSortType.ASC ? "ASC" : "DESC";
+        String cursorCompare = sort == TimelineSortType.ASC
+                ? "event_at > :cursorEventAt OR (event_at = :cursorEventAt AND (type_order > :cursorTypeOrder OR (type_order = :cursorTypeOrder AND source_id > :cursorSourceId)))"
+                : "event_at < :cursorEventAt OR (event_at = :cursorEventAt AND (type_order < :cursorTypeOrder OR (type_order = :cursorTypeOrder AND source_id < :cursorSourceId)))";
+
         String sql = """
                 WITH timeline AS (
                     SELECT
@@ -38,6 +47,8 @@ public class ReadingTimelineRepository {
                     WHERE prr.personal_book_id = :personalBookId
                       AND prr.user_id = :userId
                       AND prr.deleted_at IS NULL
+                      AND (CAST(:recordType AS text) IS NULL OR prr.record_type = :recordType)
+                      AND CAST(:gatheringId AS bigint) IS NULL
 
                     UNION ALL
 
@@ -51,9 +62,9 @@ public class ReadingTimelineRepository {
                     WHERE pmr.user_id = :userId
                       AND pmr.deleted_at IS NULL
                       AND m.deleted_at IS NULL
-                      AND CAST(:gatheringId AS bigint) IS NOT NULL
-                      AND m.gathering_id = :gatheringId
                       AND m.book_id = :bookId
+                      AND (CAST(:gatheringId AS bigint) IS NULL OR m.gathering_id = :gatheringId)
+                      AND CAST(:recordType AS text) IS NULL
 
                     UNION ALL
 
@@ -64,11 +75,11 @@ public class ReadingTimelineRepository {
                         2 AS type_order
                     FROM meeting m
                     WHERE m.deleted_at IS NULL
-                      AND CAST(:gatheringId AS bigint) IS NOT NULL
-                      AND m.gathering_id = :gatheringId
                       AND m.book_id = :bookId
                       AND m.retrospective_published = true
                       AND m.retrospective_published_at IS NOT NULL
+                      AND (CAST(:gatheringId AS bigint) IS NULL OR m.gathering_id = :gatheringId)
+                      AND CAST(:recordType AS text) IS NULL
 
                     UNION ALL
 
@@ -94,9 +105,9 @@ public class ReadingTimelineRepository {
                             AND ta.user_id = :userId
                             AND ta.deleted_at IS NULL
                         WHERE m.deleted_at IS NULL
-                          AND CAST(:gatheringId AS bigint) IS NOT NULL
-                          AND m.gathering_id = :gatheringId
                           AND m.book_id = :bookId
+                          AND (CAST(:gatheringId AS bigint) IS NULL OR m.gathering_id = :gatheringId)
+                          AND CAST(:recordType AS text) IS NULL
                         GROUP BY m.meeting_id, m.meeting_start_date
                     ) pre
                 )
@@ -108,14 +119,9 @@ public class ReadingTimelineRepository {
                 FROM timeline
                 WHERE (
                     CAST(:cursorEventAt AS timestamp) IS NULL
-                    OR event_at < :cursorEventAt
-                    OR (event_at = :cursorEventAt AND (
-                        type_order < :cursorTypeOrder
-                        OR (type_order = :cursorTypeOrder AND source_id < :cursorSourceId)
-                    ))
+                    OR \s""" + cursorCompare + """
                 )
-                ORDER BY event_at DESC, type_order DESC, source_id DESC
-                """;
+                ORDER BY event_at \s""" + dir + ", type_order " + dir + ", source_id " + dir;
 
         Query query = entityManager.createNativeQuery(sql);
         query.setParameter("personalBookId", personalBookId);
@@ -123,6 +129,7 @@ public class ReadingTimelineRepository {
         query.setParameter("bookId", bookId);
         query.setParameter("gatheringId", gatheringId);
         query.setParameter("preOpinionTime", preOpinionTime);
+        query.setParameter("recordType", recordType != null ? recordType.name() : null);
         query.setParameter("cursorEventAt", cursorEventAt);
         query.setParameter("cursorTypeOrder", cursorTypeOrder);
         query.setParameter("cursorSourceId", cursorSourceId);

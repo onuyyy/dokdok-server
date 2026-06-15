@@ -1,5 +1,7 @@
 package com.dokdok.book.entity;
 
+import com.dokdok.book.exception.BookErrorCode;
+import com.dokdok.book.exception.BookException;
 import com.dokdok.global.BaseTimeEntity;
 import com.dokdok.history.listener.BookReviewHistoryListener;
 import com.dokdok.keyword.entity.Keyword;
@@ -12,6 +14,7 @@ import org.hibernate.annotations.SQLRestriction;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -58,16 +61,18 @@ public class BookReview extends BaseTimeEntity {
 
 
     public void updateReview(BigDecimal rating, List<Keyword> keywords) {
-        boolean ratingChanged = !this.rating.equals(rating);
+        boolean ratingChanged = !Objects.equals(this.rating, rating);
         boolean keywordsChanged = updateKeywords(keywords);
+
+        if (!ratingChanged && !keywordsChanged) {
+            throw new BookException(BookErrorCode.BOOK_REVIEW_NO_CHANGES);
+        }
 
         if (ratingChanged) {
             this.rating = rating;
         }
 
-        if (ratingChanged || keywordsChanged) {
-            this.touch();
-        }
+        this.touch();
     }
 
     public void deleteReview() {

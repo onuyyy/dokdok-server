@@ -1,5 +1,6 @@
 package com.dokdok.gathering.service;
 
+import com.dokdok.book.entity.Book;
 import com.dokdok.book.repository.BookReviewRepository;
 import com.dokdok.gathering.dto.request.GatheringCreateRequest;
 import com.dokdok.gathering.dto.request.GatheringUpdateRequest;
@@ -31,6 +32,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -89,12 +91,31 @@ public class GatheringService {
     public GatheringJoinResponse joinGathering(String invitationLink) {
 
         User user = SecurityUtil.getCurrentUserEntity();
-
         Gathering gathering = gatheringValidator.validateInvitationLink(invitationLink);
-        gatheringValidator.validateJoinedGathering(gathering.getId(), user.getId());
+
+        // 기존 멤버십 확인
+        Optional<GatheringMember> existingMember = gatheringMemberRepository.findByGatheringIdAndUserId(gathering.getId(), user.getId());
+
+        if(existingMember.isPresent()) {
+            GatheringMember member = existingMember.get();
+            GatheringMemberStatus status = member.getMemberStatus();
+
+            if(status == GatheringMemberStatus.ACTIVE) {
+                throw new GatheringException(GatheringErrorCode.ALREADY_GATHERING_MEMBER);
+            }else if(status == GatheringMemberStatus.PENDING) {
+                throw new GatheringException(GatheringErrorCode.JOIN_REQUEST_ALREADY_PENDING);
+            }else if(status == GatheringMemberStatus.REJECTED) {
+                member.reapplyJoinRequest();
+                return GatheringJoinResponse.from(member);
+            }
+        }
+
+        // 강퇴 이력이 있으면 재가입 불가 (강퇴 시 removed_at이 설정되어 위 활성 멤버 조회에서는 보이지 않음)
+        if (gatheringMemberRepository.existsRemovedMember(gathering.getId(), user.getId())) {
+            throw new GatheringException(GatheringErrorCode.REMOVED_MEMBER_CANNOT_REJOIN);
+        }
 
         GatheringMember member = saveGatheringMember(gathering, user, GatheringRole.MEMBER, GatheringMemberStatus.PENDING, null);
-
         return GatheringJoinResponse.from(member);
     }
 
@@ -295,31 +316,35 @@ public class GatheringService {
         gatheringValidator.validateMembership(gatheringId, userId);
 
         Pageable pageable = PageRequest.of(page, size);
-        Page<GatheringBook> gatheringBookPage = gatheringBookRepository.findGatheringBooks(gatheringId, pageable);
+        Page<Book> bookPage = meetingRepository.findDistinctBooksByGatheringIdAndStatuses(
+                gatheringId,
+                List.of(MeetingStatus.CONFIRMED, MeetingStatus.DONE),
+                pageable
+        );
 
-        if (gatheringBookPage.isEmpty()) {
+        if (bookPage.isEmpty()) {
             return PageResponse.of(List.of(), 0, page, size);
         }
 
-        List<GatheringBook> gatheringBooks = gatheringBookPage.getContent();
-        Map<Long, Double> ratingMap = getBookRatingMap(gatheringId, gatheringBooks);
+        List<Book> books = bookPage.getContent();
+        Map<Long, Double> ratingMap = getBookRatingMap(gatheringId, books);
 
-        List<GatheringBookListResponse> responses = gatheringBooks.stream()
-                .map(gb -> GatheringBookListResponse.from(gb, ratingMap.get(gb.getBook().getId())))
+        List<GatheringBookListResponse> responses = books.stream()
+                .map(book -> GatheringBookListResponse.from(book, ratingMap.get(book.getId())))
                 .toList();
 
-        return PageResponse.of(responses, gatheringBookPage.getTotalElements(), page, size);
+        return PageResponse.of(responses, bookPage.getTotalElements(), page, size);
     }
 
-    private Map<Long, Double> getBookRatingMap(Long gatheringId, List<GatheringBook> gatheringBooks) {
+    private Map<Long, Double> getBookRatingMap(Long gatheringId, List<Book> books) {
         List<Long> meetingMemberIds = meetingMemberRepository.findByGatheringId(gatheringId);
 
         if (meetingMemberIds.isEmpty()) {
             return Map.of();
         }
 
-        List<Long> bookIds = gatheringBooks.stream()
-                .map(gb -> gb.getBook().getId())
+        List<Long> bookIds = books.stream()
+                .map(Book::getId)
                 .toList();
 
         return bookReviewRepository.findMeetingBookReviews(bookIds, meetingMemberIds).stream()

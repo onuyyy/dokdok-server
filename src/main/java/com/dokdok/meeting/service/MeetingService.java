@@ -187,6 +187,7 @@ public class MeetingService {
         }
 
         validateMeetingDatesRequired(request.meetingStartDate(), request.meetingEndDate());
+        validateCreatableMeetingStartDate(request.meetingStartDate());
 
         // 최대 참가 인원 검증
         validateMaxParticipants(maxParticipants, gathering.getId());
@@ -194,7 +195,37 @@ public class MeetingService {
         Meeting meeting = Meeting.create(request, gathering, book, user, maxParticipants);
         Meeting savedMeeting = meetingRepository.save(meeting);
 
+        // 모임장이 약속을 생성한 경우 별도 승인 없이 자동으로 확정한다.
+        if (isGatheringLeader(gathering, userId)) {
+            autoConfirmMeeting(savedMeeting, gathering);
+            List<MeetingMember> members = meetingMemberRepository
+                    .findByMeetingIdAndUserId(savedMeeting.getId(), userId)
+                    .map(List::of)
+                    .orElseGet(List::of);
+            return MeetingResponse.from(savedMeeting, members);
+        }
+
         return MeetingResponse.from(savedMeeting, List.of());
+    }
+
+    /**
+     * 약속 생성자가 모임장인지 확인한다.
+     */
+    private boolean isGatheringLeader(Gathering gathering, Long userId) {
+        User leader = gathering.getGatheringLeader();
+        return leader != null && leader.getId().equals(userId);
+    }
+
+    /**
+     * 모임장이 생성한 약속을 자동으로 확정한다. 수동 확정(confirmMeeting)과 동일한 처리를 수행한다.
+     */
+    private void autoConfirmMeeting(Meeting meeting, Gathering gathering) {
+        validateConfirmable(meeting);
+        ensureLeaderMember(meeting);
+
+        meeting.changeStatus(MeetingStatus.CONFIRMED);
+        saveMeetingBookForUser(meeting, gathering, meeting.getMeetingLeader().getId());
+        topicService.createDefaultTopic(meeting);
     }
 
     /**
@@ -235,6 +266,7 @@ public class MeetingService {
         // 모임장만 거절 가능
         gatheringValidator.validateLeader(meeting.getGathering().getId(), userId);
 
+        validateRejectable(meeting);
         meeting.changeStatus(MeetingStatus.REJECTED);
 
         return MeetingStatusResponse.from(meeting);
@@ -271,6 +303,9 @@ public class MeetingService {
             throw new MeetingException(MeetingErrorCode.MEETING_DATE_REQUIRED,
                     "약속 시작/종료 일시는 필수입니다.");
         }
+        if (startDate.isBefore(LocalDateTime.now().plusHours(24))) {
+            throw new MeetingException(MeetingErrorCode.MEETING_CONFIRM_NOT_ALLOWED);
+        }
         boolean hasOverlappingMeeting = meetingRepository.existsOverlappingMeeting(
                 gatheringId,
                 MeetingStatus.CONFIRMED,
@@ -279,8 +314,19 @@ public class MeetingService {
                 endDate
         );
         if (hasOverlappingMeeting) {
-            throw new MeetingException(MeetingErrorCode.INVALID_MEETING_STATUS_CHANGE,
-                    "동일 시간에 확정된 약속이 존재합니다.");
+            throw new MeetingException(MeetingErrorCode.MEETING_CONFIRM_TIME_CONFLICT);
+        }
+    }
+
+    /**
+     * 신청된 약속만 거절 가능하다.
+     */
+    private void validateRejectable(Meeting meeting) {
+        if (meeting.getMeetingStatus() != MeetingStatus.PENDING) {
+            throw new MeetingException(
+                    MeetingErrorCode.INVALID_MEETING_STATUS_CHANGE,
+                    "신청된 약속만 거절할 수 있습니다."
+            );
         }
     }
 
@@ -317,7 +363,9 @@ public class MeetingService {
 
         Meeting meeting = meetingValidator.findMeetingOrThrow(meetingId);
 
+        validateJoinableStatus(meeting);
         validateJoinableMeetingStartDate(meeting);
+        validateNoOverlappingJoinedMeeting(meeting, userId);
 
         gatheringValidator.validateMembership(meeting.getGathering().getId(), userId);
 
@@ -549,6 +597,36 @@ public class MeetingService {
     }
 
     /**
+     * 확정된 약속만 참가 신청 가능
+     */
+    private void validateJoinableStatus(Meeting meeting) {
+        if (meeting.getMeetingStatus() != MeetingStatus.CONFIRMED) {
+            throw new MeetingException(MeetingErrorCode.MEETING_JOIN_REQUIRES_CONFIRMED);
+        }
+    }
+
+    /**
+     * 동일 시간대의 다른 확정 약속에 이미 참가 중이면 참가 신청 불가
+     */
+    private void validateNoOverlappingJoinedMeeting(Meeting meeting, Long userId) {
+        LocalDateTime meetingStartDate = meeting.getMeetingStartDate();
+        LocalDateTime meetingEndDate = meeting.getMeetingEndDate();
+
+        validateMeetingDatesRequired(meetingStartDate, meetingEndDate);
+
+        boolean hasOverlappingMeeting = meetingMemberRepository.existsOverlappingConfirmedMeetingByUserId(
+                userId,
+                meeting.getId(),
+                MeetingStatus.CONFIRMED,
+                meetingStartDate,
+                meetingEndDate
+        );
+        if (hasOverlappingMeeting) {
+            throw new MeetingException(MeetingErrorCode.MEETING_JOIN_TIME_CONFLICT);
+        }
+    }
+
+    /**
      * 종료 일시가 시작 일시보다 이전인지 확인한다.
      */
     private void validateMeetingDates(MeetingUpdateRequest request, Meeting meeting) {
@@ -573,6 +651,15 @@ public class MeetingService {
                     MeetingErrorCode.MEETING_DATE_REQUIRED,
                     "약속 시작/종료 일시는 필수입니다."
             );
+        }
+    }
+
+    /**
+     * 약속 시작 24시간 이내 일정은 신청 불가
+     */
+    private void validateCreatableMeetingStartDate(LocalDateTime startDate) {
+        if (startDate != null && startDate.isBefore(LocalDateTime.now().plusHours(24))) {
+            throw new MeetingException(MeetingErrorCode.MEETING_CREATE_NOT_ALLOWED);
         }
     }
 
@@ -614,23 +701,12 @@ public class MeetingService {
         gatheringValidator.validateMembership(gatheringId, userId);
 
         int allCount = meetingRepository
-                .countByGatheringIdAndMeetingStatus(gatheringId, MeetingStatus.CONFIRMED);
+                .countByGatheringIdAndMeetingStatusIn(gatheringId, List.of(MeetingStatus.CONFIRMED, MeetingStatus.DONE));
         int doneCount = meetingRepository
                 .countByGatheringIdAndMeetingStatus(gatheringId, MeetingStatus.DONE);
-
-        LocalDateTime now = LocalDateTime.now();
-        int upcomingCount = meetingRepository.countUpcomingMeetings(
-                gatheringId,
-                MeetingStatus.CONFIRMED,
-                now,
-                now.plusDays(3)
-        );
-
-        int joinedCount = meetingMemberRepository.countMeetingsByUserIdAndStatus(
-                userId,
-                gatheringId,
-                MeetingStatus.DONE
-        );
+        int upcomingCount = meetingRepository
+                .countByGatheringIdAndMeetingStatus(gatheringId, MeetingStatus.CONFIRMED);
+        int joinedCount = meetingMemberRepository.countMeetingsByUserIdAndGatheringId(userId, gatheringId);
 
         return MeetingTabCountsResponse.builder()
                 .all(allCount)
@@ -754,6 +830,7 @@ public class MeetingService {
                 userId,
                 List.of(MeetingStatus.CONFIRMED, MeetingStatus.DONE)
         );
+        // 다가오는 약속 = 3일 이내 시작하는 확정 약속. 리스트(getMyMeetingList UPCOMING)와 동일 기준이어야 한다.
         int upcomingCount = meetingMemberRepository.countMyUpcomingMeetings(
                 userId,
                 MeetingStatus.CONFIRMED,
@@ -780,9 +857,9 @@ public class MeetingService {
             Pageable pageable,
             Long userId
     ) {
-        Page<Meeting> meetingPage = meetingRepository.findByGatheringIdAndMeetingStatus(
+        Page<Meeting> meetingPage = meetingRepository.findByGatheringIdAndMeetingStatusIn(
                 gatheringId,
-                MeetingStatus.CONFIRMED,
+                List.of(MeetingStatus.CONFIRMED, MeetingStatus.DONE),
                 pageable
         );
         return buildMeetingPageResponse(meetingPage, userId, gatheringId);
@@ -796,12 +873,9 @@ public class MeetingService {
             Pageable pageable,
             Long userId
     ) {
-        LocalDateTime now = LocalDateTime.now();
-        Page<Meeting> meetingPage = meetingRepository.findByGatheringIdAndMeetingStatusAndMeetingStartDateBetween(
+        Page<Meeting> meetingPage = meetingRepository.findByGatheringIdAndMeetingStatus(
                 gatheringId,
                 MeetingStatus.CONFIRMED,
-                now,
-                now.plusDays(3),
                 pageable
         );
         return buildMeetingPageResponse(meetingPage, userId, gatheringId);
@@ -903,6 +977,12 @@ public class MeetingService {
         Set<Long> joinedMeetingIds = new HashSet<>(
                 meetingMemberRepository.findActiveMeetingIdsByUserIdAndGatheringId(userId, gatheringId)
         );
+        Set<Long> preOpinionMeetingIds = new HashSet<>(
+                topicAnswerRepository.findMeetingIdsWithSubmittedAnswers(meetingIds, userId)
+        );
+        Set<Long> retrospectiveMeetingIds = new HashSet<>(
+                personalRetrospectiveRepository.findMeetingIdsWithRetrospective(meetingIds, userId)
+        );
 
         List<MeetingListItemResponse> items = new ArrayList<>();
         for (Meeting meeting : meetings) {
@@ -923,6 +1003,8 @@ public class MeetingService {
                     .joined(joined)
                     .myRole(myRole)
                     .meetingStatus(meeting.getMeetingStatus())
+                    .hasPreOpinion(preOpinionMeetingIds.contains(meeting.getId()))
+                    .hasPersonalRetrospective(retrospectiveMeetingIds.contains(meeting.getId()))
                     .build());
         }
         return items;
@@ -940,6 +1022,12 @@ public class MeetingService {
                 .toList();
         Set<Long> meetingIdsWithConfirmedTopics = new HashSet<>(
                 topicRepository.findMeetingIdsWithConfirmedTopics(meetingIds)
+        );
+        Set<Long> preOpinionMeetingIds = new HashSet<>(
+                topicAnswerRepository.findMeetingIdsWithSubmittedAnswers(meetingIds, userId)
+        );
+        Set<Long> retrospectiveMeetingIds = new HashSet<>(
+                personalRetrospectiveRepository.findMeetingIdsWithRetrospective(meetingIds, userId)
         );
 
         for (Meeting meeting : meetings) {
@@ -963,7 +1051,9 @@ public class MeetingService {
                     meeting.getMeetingStatus(),
                     myRole,
                     progressStatus,
-                    preOpinionTemplateConfirmed
+                    preOpinionTemplateConfirmed,
+                    preOpinionMeetingIds.contains(meeting.getId()),
+                    retrospectiveMeetingIds.contains(meeting.getId())
             ));
         }
         return items;

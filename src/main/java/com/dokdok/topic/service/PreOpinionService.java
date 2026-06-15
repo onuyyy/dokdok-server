@@ -1,9 +1,5 @@
 package com.dokdok.topic.service;
 
-import com.dokdok.book.entity.BookReview;
-import com.dokdok.book.entity.BookReviewKeyword;
-import com.dokdok.book.repository.BookReviewKeywordRepository;
-import com.dokdok.book.repository.BookReviewRepository;
 import com.dokdok.gathering.entity.GatheringMember;
 import com.dokdok.gathering.entity.GatheringRole;
 import com.dokdok.gathering.repository.GatheringMemberRepository;
@@ -16,7 +12,12 @@ import com.dokdok.meeting.service.MeetingValidator;
 import com.dokdok.storage.service.StorageService;
 import com.dokdok.topic.dto.response.PreOpinionResponse;
 import com.dokdok.topic.dto.response.PreOpinionResponse.BookReviewInfo;
+import com.dokdok.topic.entity.PreOpinionBookReview;
+import com.dokdok.topic.entity.PreOpinionBookReviewKeyword;
 import com.dokdok.topic.entity.TopicAnswer;
+import com.dokdok.topic.exception.TopicErrorCode;
+import com.dokdok.topic.exception.TopicException;
+import com.dokdok.topic.repository.PreOpinionBookReviewRepository;
 import com.dokdok.topic.repository.TopicAnswerRepository;
 import com.dokdok.topic.repository.TopicRepository;
 import com.dokdok.user.entity.User;
@@ -24,8 +25,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -41,8 +40,8 @@ public class PreOpinionService {
     private final TopicRepository topicRepository;
     private final MeetingMemberRepository meetingMemberRepository;
     private final TopicAnswerRepository topicAnswerRepository;
-    private final BookReviewRepository bookReviewRepository;
-    private final BookReviewKeywordRepository bookReviewKeywordRepository;
+    private final PreOpinionBookReviewRepository preOpinionBookReviewRepository;
+    private final PreOpinionBookReviewService preOpinionBookReviewService;
     private final StorageService storageService;
 
     @Transactional(readOnly = true)
@@ -51,7 +50,7 @@ public class PreOpinionService {
         validateAccess(gatheringId, meetingId, userId);
 
         List<PreOpinionResponse.TopicInfo> topicInfos = buildTopicInfos(meetingId);
-        List<MeetingMember> meetingMembers = meetingMemberRepository.findAllByMeetingId(meetingId);
+        List<MeetingMember> meetingMembers = meetingMemberRepository.findAllByMeetingIdOrderByTopicAnswerDate(meetingId);
 
         List<PreOpinionResponse.MemberPreOpinion> preOpinionData = buildPreOpinionData(gatheringId, meetingId, meetingMembers);
 
@@ -72,6 +71,7 @@ public class PreOpinionService {
         List<TopicAnswer> topicAnswers = topicValidator.getTopicAnswers(meetingId, userId);
 
         topicAnswers.forEach(TopicAnswer::softDelete);
+        preOpinionBookReviewService.deleteMyReview(meetingId);
     }
 
     private void validateAccess(Long gatheringId, Long meetingId, Long userId) {
@@ -82,9 +82,14 @@ public class PreOpinionService {
     }
 
     private List<PreOpinionResponse.TopicInfo> buildTopicInfos(Long meetingId) {
-        return topicRepository.findConfirmedTopics(meetingId).stream()
+        List<PreOpinionResponse.TopicInfo> topicInfos = topicRepository.findConfirmedTopics(meetingId).stream()
                 .map(PreOpinionResponse.TopicInfo::from)
                 .toList();
+
+        if(topicInfos.isEmpty()) {
+            throw new TopicException(TopicErrorCode.TOPIC_NOT_FOUND);
+        }
+        return topicInfos;
     }
 
     private List<PreOpinionResponse.MemberPreOpinion> buildPreOpinionData(Long gatheringId, Long meetingId, List<MeetingMember> meetingMembers) {
@@ -94,10 +99,8 @@ public class PreOpinionService {
 
     private record PreOpinionMaps(
             Map<Long, GatheringRole> gatheringRoleByUserId,
-            Map<Long, BookReview> bookReviewByUserId,
-            Map<Long, List<BookReviewKeyword>> keywordsByReviewId,
-            Map<Long, List<PreOpinionResponse.TopicOpinion>> topicAnswersByUserId,
-            Map<Long, LocalDateTime> earliestAnswerByUserId
+            Map<Long, PreOpinionBookReview> bookReviewByUserId,
+            Map<Long, List<PreOpinionResponse.TopicOpinion>> topicAnswersByUserId
     ) {}
 
     private PreOpinionMaps fetchPreOpinionMaps(Long gatheringId, Long meetingId, List<MeetingMember> meetingMembers) {
@@ -113,19 +116,12 @@ public class PreOpinionService {
                         (existing, replacement) -> existing
                 ));
 
-        Map<Long, BookReview> bookReviewByUserId = bookReviewRepository.findByUserIdIn(userIds, meetingId).stream()
+        Map<Long, PreOpinionBookReview> bookReviewByUserId = preOpinionBookReviewRepository.findByMeetingIdAndUserIdIn(meetingId, userIds).stream()
                 .collect(Collectors.toMap(
                         br -> br.getUser().getId(),
                         br -> br,
                         (existing, replacement) -> existing
                 ));
-
-        List<Long> bookReviewIds = bookReviewByUserId.values().stream()
-                .map(BookReview::getId)
-                .toList();
-        Map<Long, List<BookReviewKeyword>> keywordsByReviewId = bookReviewKeywordRepository
-                .findByBookReviewIds(bookReviewIds).stream()
-                .collect(Collectors.groupingBy(k -> k.getBookReview().getId()));
 
         List<TopicAnswer> allTopicAnswers = topicAnswerRepository.findByMeetingId(meetingId);
 
@@ -139,28 +135,15 @@ public class PreOpinionService {
                                 )
                         ));
 
-        Map<Long, LocalDateTime> earliestAnswerByUserId = allTopicAnswers.stream()
-                .collect(Collectors.toMap(
-                        ta -> ta.getUser().getId(),
-                        TopicAnswer::getCreatedAt,
-                        (a, b) -> a.isBefore(b) ? a : b
-                ));
-
         return new PreOpinionMaps(
                 gatheringRoleByUserId,
                 bookReviewByUserId,
-                keywordsByReviewId,
-                topicAnswersByUserId,
-                earliestAnswerByUserId
+                topicAnswersByUserId
         );
     }
 
     private List<PreOpinionResponse.MemberPreOpinion> assembleMembers(List<MeetingMember> meetingMembers, PreOpinionMaps maps) {
         return meetingMembers.stream()
-                .sorted(Comparator.comparing(
-                        (MeetingMember mm) -> maps.earliestAnswerByUserId().getOrDefault(
-                                mm.getUser().getId(), LocalDateTime.MAX)
-                ))
                 .map(mm -> toMemberPreOpinion(mm, maps))
                 .toList();
     }
@@ -175,14 +158,15 @@ public class PreOpinionService {
         PreOpinionResponse.MemberInfo memberInfo
                 = PreOpinionResponse.MemberInfo.of(user.getId(), user.getNickname(), presignedUrl, role);
 
-        BookReview review = maps.bookReviewByUserId().get(memberId);
-        BookReviewInfo bookReviewInfo = review != null
-                ? toBookReviewInfo(review, maps.keywordsByReviewId())
+        boolean isSubmitted = maps.topicAnswersByUserId().containsKey(memberId);
+        PreOpinionBookReview review = maps.bookReviewByUserId().get(memberId);
+        BookReviewInfo bookReviewInfo = review != null && isSubmitted
+                ? toBookReviewInfo(review)
                 : null;
 
         List<PreOpinionResponse.TopicOpinion> topicAnswers = maps.topicAnswersByUserId().getOrDefault(memberId, List.of());
 
-        return new PreOpinionResponse.MemberPreOpinion(memberInfo, bookReviewInfo, topicAnswers, maps.topicAnswersByUserId().containsKey(memberId));
+        return new PreOpinionResponse.MemberPreOpinion(memberInfo, bookReviewInfo, topicAnswers, isSubmitted);
     }
 
     /**
@@ -206,17 +190,14 @@ public class PreOpinionService {
      * - 사전의견을 발행하지 않은 사용자는 책 평가도 반환하지 않음
      */
     private BookReviewInfo toBookReviewInfo(
-            BookReview bookReview,
-            Map<Long, List<BookReviewKeyword>> keywordsByReviewId
+            PreOpinionBookReview bookReview
     ) {
-        List<BookReviewKeyword> reviewKeywords =
-                keywordsByReviewId.getOrDefault(bookReview.getId(), List.of());
-
-        List<PreOpinionResponse.KeywordInfo> keywordInfos = reviewKeywords.stream()
-                .map(rk -> PreOpinionResponse.KeywordInfo.of(
-                        rk.getKeyword().getId(),
-                        rk.getKeyword().getKeywordName(),
-                        rk.getKeyword().getKeywordType()
+        List<PreOpinionResponse.KeywordInfo> keywordInfos = bookReview.getKeywords().stream()
+                .map(PreOpinionBookReviewKeyword::getKeyword)
+                .map(keyword -> PreOpinionResponse.KeywordInfo.of(
+                        keyword.getId(),
+                        keyword.getKeywordName(),
+                        keyword.getKeywordType()
                 ))
                 .toList();
 

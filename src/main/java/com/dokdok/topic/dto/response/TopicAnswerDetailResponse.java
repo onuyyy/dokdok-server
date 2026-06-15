@@ -14,7 +14,7 @@ import java.util.List;
 public record TopicAnswerDetailResponse(
         @Schema(description = "책 정보")
         BookInfo book,
-        @Schema(description = "책 평가 정보")
+        @Schema(description = "사전의견 전용 책 평가 정보")
         BookReviewResponse review,
         @Schema(description = "사전 의견 정보")
         PreOpinion preOpinion

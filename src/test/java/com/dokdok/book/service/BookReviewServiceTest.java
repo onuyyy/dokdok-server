@@ -35,11 +35,11 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -87,10 +87,10 @@ class BookReviewServiceTest {
             securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(3L);
             securityUtilMock.when(SecurityUtil::getCurrentUserEntity).thenReturn(user);
 
-            doNothing().when(bookValidator).validateReviewNotExists(1L, 3L);
             when(bookValidator.validateAndGetBook(1L)).thenReturn(book);
             when(keywordValidator.validateAndGetSelectableKeyword(2L)).thenReturn(keyword);
             when(keywordValidator.validateAndGetSelectableKeyword(4L)).thenReturn(keywordSecond);
+            when(bookReviewRepository.findByBookIdAndUserId(1L, 3L)).thenReturn(Optional.empty());
             when(bookReviewRepository.save(any(BookReview.class))).thenReturn(saved);
 
             BookReviewResponse response = bookReviewService.createReview(1L, request);
@@ -104,10 +104,10 @@ class BookReviewServiceTest {
                     new BookReviewResponse.KeywordInfo(4L, "몰입", KeywordType.IMPRESSION)
             );
 
-            verify(bookValidator).validateReviewNotExists(1L, 3L);
             verify(bookValidator).validateAndGetBook(1L);
             verify(keywordValidator).validateAndGetSelectableKeyword(2L);
             verify(keywordValidator).validateAndGetSelectableKeyword(4L);
+            verify(bookReviewRepository).findByBookIdAndUserId(1L, 3L);
             verify(bookReviewRepository).save(any(BookReview.class));
         }
     }
@@ -192,25 +192,68 @@ class BookReviewServiceTest {
     }
 
     @Test
-    @DisplayName("리뷰가 이미 존재하면 생성 시 예외가 발생한다")
-    void createReview_throwsWhenAlreadyExists() {
+    @DisplayName("리뷰가 이미 존재하면 수정한다 (upsert)")
+    void createReview_updatesWhenAlreadyExists() {
         Book book = Book.builder().id(1L).build();
-        Keyword keyword = Keyword.builder().id(2L).build();
+        Keyword existingKeyword = Keyword.builder().id(2L).keywordName("감동").keywordType(KeywordType.BOOK).build();
+        Keyword newKeyword = Keyword.builder().id(5L).keywordName("희망").keywordType(KeywordType.BOOK).build();
         User user = User.builder().id(3L).build();
-        BookReviewRequest request = new BookReviewRequest(new BigDecimal("4.5"), List.of(2L));
+        BookReviewRequest request = new BookReviewRequest(new BigDecimal("3.5"), List.of(5L));
+
+        BookReview existingReview = BookReview.builder()
+                .id(10L)
+                .book(book)
+                .user(user)
+                .rating(new BigDecimal("4.5"))
+                .keywords(new ArrayList<>(List.of(
+                        BookReviewKeyword.builder().keyword(existingKeyword).build()
+                )))
+                .build();
 
         try (MockedStatic<SecurityUtil> securityUtilMock = org.mockito.Mockito.mockStatic(SecurityUtil.class)) {
             securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(3L);
-            securityUtilMock.when(SecurityUtil::getCurrentUserEntity).thenReturn(user);
+
+            when(bookValidator.validateAndGetBook(1L)).thenReturn(book);
+            when(keywordValidator.validateAndGetSelectableKeyword(5L)).thenReturn(newKeyword);
+            when(bookReviewRepository.findByBookIdAndUserId(1L, 3L)).thenReturn(Optional.of(existingReview));
+
+            BookReviewResponse response = bookReviewService.createReview(1L, request);
+
+            assertThat(response.reviewId()).isEqualTo(10L);
+            assertThat(response.rating()).isEqualTo(new BigDecimal("3.5"));
+            assertThat(existingReview.getRating()).isEqualTo(new BigDecimal("3.5"));
+            verify(bookReviewRepository, never()).save(any(BookReview.class));
+        }
+    }
+
+    @Test
+    @DisplayName("리뷰가 이미 존재하고 변경사항이 없으면 예외가 발생한다")
+    void createReview_throwsWhenNoChanges() {
+        Book book = Book.builder().id(1L).build();
+        Keyword keyword = Keyword.builder().id(2L).keywordName("감동").keywordType(KeywordType.BOOK).build();
+        User user = User.builder().id(3L).build();
+        BookReviewRequest request = new BookReviewRequest(new BigDecimal("4.5"), List.of(2L));
+
+        BookReview existingReview = BookReview.builder()
+                .id(10L)
+                .book(book)
+                .user(user)
+                .rating(new BigDecimal("4.5"))
+                .keywords(new ArrayList<>(List.of(
+                        BookReviewKeyword.builder().keyword(keyword).build()
+                )))
+                .build();
+
+        try (MockedStatic<SecurityUtil> securityUtilMock = org.mockito.Mockito.mockStatic(SecurityUtil.class)) {
+            securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(3L);
 
             when(bookValidator.validateAndGetBook(1L)).thenReturn(book);
             when(keywordValidator.validateAndGetSelectableKeyword(2L)).thenReturn(keyword);
-            doThrow(new BookException(BookErrorCode.BOOK_REVIEW_ALREADY_EXISTS))
-                    .when(bookValidator).validateReviewNotExists(1L, 3L);
+            when(bookReviewRepository.findByBookIdAndUserId(1L, 3L)).thenReturn(Optional.of(existingReview));
 
             assertThatThrownBy(() -> bookReviewService.createReview(1L, request))
                     .isInstanceOf(BookException.class)
-                    .hasFieldOrPropertyWithValue("errorCode", BookErrorCode.BOOK_REVIEW_ALREADY_EXISTS);
+                    .hasFieldOrPropertyWithValue("errorCode", BookErrorCode.BOOK_REVIEW_NO_CHANGES);
 
             verify(bookReviewRepository, never()).save(any(BookReview.class));
         }
@@ -367,6 +410,38 @@ class BookReviewServiceTest {
             assertThatThrownBy(() -> bookReviewService.updateMyReview(1L, request))
                     .isInstanceOf(BookException.class)
                     .hasFieldOrPropertyWithValue("errorCode", BookErrorCode.BOOK_REVIEW_NOT_FOUND);
+        }
+    }
+
+    @Test
+    @DisplayName("기존 리뷰의 별점이 null이어도 수정 시 NPE가 발생하지 않는다")
+    void updateMyReview_withNullExistingRating_updatesSuccessfully() {
+        Book book = Book.builder().id(1L).build();
+        Keyword keyword = Keyword.builder().id(2L).keywordName("감동").keywordType(KeywordType.BOOK).build();
+        Keyword newKeyword = Keyword.builder().id(5L).keywordName("희망").keywordType(KeywordType.BOOK).build();
+        User user = User.builder().id(3L).build();
+        // null rating으로 생성된 기존 리뷰
+        BookReview review = BookReview.builder()
+                .id(10L)
+                .book(book)
+                .user(user)
+                .rating(null)
+                .keywords(new ArrayList<>(List.of(
+                        BookReviewKeyword.builder().keyword(keyword).build()
+                )))
+                .build();
+        BookReviewRequest request = new BookReviewRequest(new BigDecimal("4.0"), List.of(5L));
+
+        try (MockedStatic<SecurityUtil> securityUtilMock = org.mockito.Mockito.mockStatic(SecurityUtil.class)) {
+            securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(3L);
+
+            when(bookValidator.validateAndGetReviewForUpdate(1L, 3L)).thenReturn(review);
+            when(keywordValidator.validateAndGetSelectableKeyword(5L)).thenReturn(newKeyword);
+
+            BookReviewResponse response = bookReviewService.updateMyReview(1L, request);
+
+            assertThat(review.getRating()).isEqualTo(new BigDecimal("4.0"));
+            assertThat(response.reviewId()).isEqualTo(10L);
         }
     }
 

@@ -1,3 +1,28 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+server:
+  servlet:
+    session:
+      cookie:
+        same-site: lax
+
+logging:
+  file:
+    path: /opt/dokdok/prod/logs
+
+springdoc:
+  swagger-ui:
+    servers:
+      - url: https://dokdok.site
+        description: 운영 서버
+
 app:
   error-webhook:
     enabled: ${ERROR_WEBHOOK_ENABLED:true}

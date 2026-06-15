@@ -35,8 +35,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BaseException.class)
     protected ResponseEntity<ApiResponse<Void>> handleBaseException(BaseException e) {
         BaseErrorCode errorCode = e.getErrorCode();
-        log.warn("BaseException: code={}, message={}",
-                errorCode.getCode(), e.getMessage());
+        StackTraceElement origin = e.getStackTrace()[0];
+        log.warn("BaseException: code={}, message={}, at={}.{}({}:{})",
+                errorCode.getCode(), e.getMessage(),
+                origin.getClassName(), origin.getMethodName(),
+                origin.getFileName(), origin.getLineNumber());
 
         return ApiResponse.error(
                 errorCode.getStatus(),

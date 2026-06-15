@@ -35,4 +35,17 @@ public record GatheringBookListResponse(
                 ratingAverage
         );
     }
+
+    public static GatheringBookListResponse from(
+            Book book,
+            Double ratingAverage
+    ) {
+        return new GatheringBookListResponse(
+                book.getId(),
+                book.getBookName(),
+                book.getAuthor(),
+                book.getThumbnail(),
+                ratingAverage
+        );
+    }
 }

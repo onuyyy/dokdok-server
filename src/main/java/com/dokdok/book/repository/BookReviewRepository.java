@@ -13,8 +13,6 @@ import java.util.Optional;
 public interface BookReviewRepository extends JpaRepository<BookReview, Long> {
     Optional<BookReview> findByBookIdAndUserId(Long bookId, Long userId);
 
-    boolean existsByBookIdAndUserId(Long bookId, Long userId);
-
     @Query("""
             SELECT br
             FROM BookReview br

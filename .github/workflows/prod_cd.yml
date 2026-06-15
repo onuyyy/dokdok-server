@@ -1,8 +1,7 @@
-
 on:
   pull_request:
-    branches: [ "main" ]      # 타깃 브랜치가 main PR
-    types: [ closed ]         # PR이 닫힐 때(merge 또는 close)
+    branches: [ "main" ]
+    types: [ closed ]
 
 jobs:
   deploy:
@@ -17,51 +16,56 @@ jobs:
       - name: SSH to EC2 and deploy
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: ${{ secrets.EC2_PROD_HOST }}
+          host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: POSTGRES_DB,POSTGRES_USER,POSTGRES_PASSWORD,DB_USERNAME,DB_PASSWORD,SPRING_PROFILE,KAKAO_CLIENT_ID,KAKAO_CLIENT_SECRET,KAKAO_API_KEY,KAKAO_API_BASE_URL
+          # 원격에서 docker build(gradle 빌드)가 10분(기본값)을 넘겨 타임아웃나는 것을 방지
+          command_timeout: 30m
+          envs: POSTGRES_DB,POSTGRES_USER,POSTGRES_PASSWORD,DB_USERNAME,DB_PASSWORD,KAKAO_CLIENT_ID,KAKAO_CLIENT_SECRET,KAKAO_API_KEY,KAKAO_API_BASE_URL,MINIO_ACCESS_KEY,MINIO_SECRET_KEY,MINIO_EXTERNAL_ENDPOINT,MINIO_BUCKET,MINIO_SERVER_URL
           script: |
             set -e
-            cd ${{ secrets.EC2_APP_DIR }}
+            cd /opt/dokdok/prod/be
             git fetch --all
             git reset --hard origin/main
 
-            # .env 파일 생성
             cat > .env << EOF
-            # Spring Profile
-            SPRING_PROFILE=${SPRING_PROFILE}
+            SPRING_PROFILE=prod
+            APP_PORT=8081
+            DB_PORT=5433
+            MINIO_INTERNAL_ENDPOINT=http://dokdok-minio:9000
 
-            # PostgreSQL Database Configuration
             POSTGRES_DB=${POSTGRES_DB}
             POSTGRES_USER=${POSTGRES_USER}
             POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-
-            # Application Database Connection
             DB_USERNAME=${DB_USERNAME}
             DB_PASSWORD=${DB_PASSWORD}
 
-            # Kakao OAuth
             KAKAO_CLIENT_ID=${KAKAO_CLIENT_ID}
             KAKAO_CLIENT_SECRET=${KAKAO_CLIENT_SECRET}
-
-            # Kakao book API
             KAKAO_API_KEY=${KAKAO_API_KEY}
             KAKAO_API_BASE_URL=${KAKAO_API_BASE_URL}
+
+            MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+            MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+            MINIO_EXTERNAL_ENDPOINT=${MINIO_EXTERNAL_ENDPOINT}
+            MINIO_BUCKET=${MINIO_BUCKET}
+            MINIO_SERVER_URL=${MINIO_SERVER_URL}
             EOF
 
-            # 앱 프로필만 빌드/재시작 (모니터링 스택은 건드리지 않음)
-            docker compose --profile app pull
             docker compose --profile app up -d --build app
             docker compose ps
         env:
-          SPRING_PROFILE: prod
-          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
-          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          DB_USERNAME: ${{ secrets.DB_USERNAME }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.PROD_POSTGRES_DB }}
+          POSTGRES_USER: ${{ secrets.PROD_POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.PROD_POSTGRES_PASSWORD }}
+          DB_USERNAME: ${{ secrets.PROD_DB_USERNAME }}
+          DB_PASSWORD: ${{ secrets.PROD_DB_PASSWORD }}
           KAKAO_CLIENT_ID: ${{ secrets.KAKAO_CLIENT_ID }}
           KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
           KAKAO_API_KEY: ${{ secrets.KAKAO_API_KEY }}
           KAKAO_API_BASE_URL: ${{ secrets.KAKAO_API_BASE_URL }}
+          MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+          MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+          MINIO_EXTERNAL_ENDPOINT: ${{ secrets.PROD_MINIO_EXTERNAL_ENDPOINT }}
+          MINIO_BUCKET: ${{ secrets.PROD_MINIO_BUCKET }}
+          MINIO_SERVER_URL: ${{ secrets.PROD_MINIO_SERVER_URL }}

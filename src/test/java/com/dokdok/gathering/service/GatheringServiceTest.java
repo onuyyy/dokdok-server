@@ -335,7 +335,7 @@ class GatheringServiceTest {
 		assertThat(firstGathering.totalMembers()).isEqualTo(1);
 		assertThat(firstGathering.totalMeetings()).isEqualTo(3);
 		assertThat(firstGathering.currentUserRole()).isEqualTo(LEADER);
-		assertThat(firstGathering.daysFromJoined()).isEqualTo(10);
+		assertThat(firstGathering.daysFromJoined()).isEqualTo(11);
 
 		GatheringListItemResponse secondGathering = response.gatherings().get(1);
 		assertThat(secondGathering.gatheringId()).isEqualTo(2L);
@@ -1036,7 +1036,6 @@ class GatheringServiceTest {
 
 		securityUtilMock.verify(SecurityUtil::getCurrentUserEntity, times(1));
 		verify(gatheringValidator, times(1)).validateInvitationLink(invitationLink);
-		verify(gatheringValidator, times(1)).validateJoinedGathering(1L, 3L);
 		verify(gatheringMemberRepository, times(1)).save(any(GatheringMember.class));
 	}
 
@@ -1058,7 +1057,6 @@ class GatheringServiceTest {
 
 		securityUtilMock.verify(SecurityUtil::getCurrentUserEntity, times(1));
 		verify(gatheringValidator, times(1)).validateInvitationLink(invalidLink);
-		verify(gatheringValidator, times(0)).validateJoinedGathering(any(), any());
 		verify(gatheringMemberRepository, times(0)).save(any());
 	}
 
@@ -1071,8 +1069,8 @@ class GatheringServiceTest {
 		securityUtilMock.when(SecurityUtil::getCurrentUserEntity).thenReturn(member);
 
 		given(gatheringValidator.validateInvitationLink(invitationLink)).willReturn(gathering1);
-		doThrow(new GatheringException(GatheringErrorCode.ALREADY_GATHERING_MEMBER))
-				.when(gatheringValidator).validateJoinedGathering(1L, 2L);
+		given(gatheringMemberRepository.findByGatheringIdAndUserId(1L, 2L))
+				.willReturn(Optional.of(normalMember));
 
 		// when & then
 		assertThatThrownBy(() -> gatheringService.joinGathering(invitationLink))
@@ -1081,7 +1079,6 @@ class GatheringServiceTest {
 
 		securityUtilMock.verify(SecurityUtil::getCurrentUserEntity, times(1));
 		verify(gatheringValidator, times(1)).validateInvitationLink(invitationLink);
-		verify(gatheringValidator, times(1)).validateJoinedGathering(1L, 2L);
 		verify(gatheringMemberRepository, times(0)).save(any());
 	}
 
@@ -1094,8 +1091,8 @@ class GatheringServiceTest {
 		securityUtilMock.when(SecurityUtil::getCurrentUserEntity).thenReturn(pendingUser);
 
 		given(gatheringValidator.validateInvitationLink(invitationLink)).willReturn(gathering1);
-		doThrow(new GatheringException(GatheringErrorCode.JOIN_REQUEST_ALREADY_PENDING))
-				.when(gatheringValidator).validateJoinedGathering(1L, 4L);
+		given(gatheringMemberRepository.findByGatheringIdAndUserId(1L, 4L))
+				.willReturn(Optional.of(pendingMember));
 
 		// when & then
 		assertThatThrownBy(() -> gatheringService.joinGathering(invitationLink))
@@ -1104,7 +1101,32 @@ class GatheringServiceTest {
 
 		securityUtilMock.verify(SecurityUtil::getCurrentUserEntity, times(1));
 		verify(gatheringValidator, times(1)).validateInvitationLink(invitationLink);
-		verify(gatheringValidator, times(1)).validateJoinedGathering(1L, 4L);
+		verify(gatheringMemberRepository, times(0)).save(any());
+	}
+
+	@Test
+	@DisplayName("모임 가입 실패 - 강퇴된 사용자는 재가입할 수 없음")
+	void joinGathering_Fail_RemovedMemberCannotRejoin() {
+		// given
+		String invitationLink = "https://invite.link/abc123";
+
+		securityUtilMock.when(SecurityUtil::getCurrentUserEntity).thenReturn(newUser);
+
+		given(gatheringValidator.validateInvitationLink(invitationLink)).willReturn(gathering1);
+		// 강퇴 시 removed_at이 설정되어 활성 멤버 조회에는 잡히지 않음
+		given(gatheringMemberRepository.findByGatheringIdAndUserId(1L, 3L))
+				.willReturn(Optional.empty());
+		// 강퇴 이력 존재
+		given(gatheringMemberRepository.existsRemovedMember(1L, 3L))
+				.willReturn(true);
+
+		// when & then
+		assertThatThrownBy(() -> gatheringService.joinGathering(invitationLink))
+				.isInstanceOf(GatheringException.class)
+				.hasMessage(GatheringErrorCode.REMOVED_MEMBER_CANNOT_REJOIN.getMessage());
+
+		securityUtilMock.verify(SecurityUtil::getCurrentUserEntity, times(1));
+		verify(gatheringValidator, times(1)).validateInvitationLink(invitationLink);
 		verify(gatheringMemberRepository, times(0)).save(any());
 	}
 
@@ -1306,20 +1328,8 @@ class GatheringServiceTest {
 				.isbn("978-0134757599")
 				.build();
 
-		GatheringBook gatheringBook1 = GatheringBook.builder()
-				.id(1L)
-				.gathering(gathering1)
-				.book(book1)
-				.build();
-
-		GatheringBook gatheringBook2 = GatheringBook.builder()
-				.id(2L)
-				.gathering(gathering1)
-				.book(book2)
-				.build();
-
-		List<GatheringBook> gatheringBooks = List.of(gatheringBook1, gatheringBook2);
-		Page<GatheringBook> gatheringBookPage = new PageImpl<>(gatheringBooks, PageRequest.of(page, size), 2);
+		List<Book> books = List.of(book1, book2);
+		Page<Book> bookPage = new PageImpl<>(books, PageRequest.of(page, size), 2);
 
 		List<Long> meetingMemberIds = List.of(1L, 2L, 3L);
 		List<BookRatingAverage> ratingAverages = List.of(
@@ -1328,8 +1338,8 @@ class GatheringServiceTest {
 		);
 
 		securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
-		given(gatheringBookRepository.findGatheringBooks(eq(gatheringId), any(Pageable.class)))
-				.willReturn(gatheringBookPage);
+		given(meetingRepository.findDistinctBooksByGatheringIdAndStatuses(eq(gatheringId), any(), any(Pageable.class)))
+				.willReturn(bookPage);
 		given(meetingMemberRepository.findByGatheringId(gatheringId)).willReturn(meetingMemberIds);
 		given(bookReviewRepository.findMeetingBookReviews(List.of(1L, 2L), meetingMemberIds))
 				.willReturn(ratingAverages);
@@ -1368,10 +1378,10 @@ class GatheringServiceTest {
 		int page = 0;
 		int size = 10;
 
-		Page<GatheringBook> emptyPage = new PageImpl<>(List.of(), PageRequest.of(page, size), 0);
+		Page<Book> emptyPage = new PageImpl<>(List.of(), PageRequest.of(page, size), 0);
 
 		securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
-		given(gatheringBookRepository.findGatheringBooks(eq(gatheringId), any(Pageable.class)))
+		given(meetingRepository.findDistinctBooksByGatheringIdAndStatuses(eq(gatheringId), any(), any(Pageable.class)))
 				.willReturn(emptyPage);
 
 		// when
@@ -1407,18 +1417,11 @@ class GatheringServiceTest {
 				.isbn("978-0132350884")
 				.build();
 
-		GatheringBook gatheringBook1 = GatheringBook.builder()
-				.id(1L)
-				.gathering(gathering1)
-				.book(book1)
-				.build();
-
-		List<GatheringBook> gatheringBooks = List.of(gatheringBook1);
-		Page<GatheringBook> gatheringBookPage = new PageImpl<>(gatheringBooks, PageRequest.of(page, size), 1);
+		Page<Book> bookPage = new PageImpl<>(List.of(book1), PageRequest.of(page, size), 1);
 
 		securityUtilMock.when(SecurityUtil::getCurrentUserId).thenReturn(userId);
-		given(gatheringBookRepository.findGatheringBooks(eq(gatheringId), any(Pageable.class)))
-				.willReturn(gatheringBookPage);
+		given(meetingRepository.findDistinctBooksByGatheringIdAndStatuses(eq(gatheringId), any(), any(Pageable.class)))
+				.willReturn(bookPage);
 		given(meetingMemberRepository.findByGatheringId(gatheringId)).willReturn(List.of());
 
 		// when

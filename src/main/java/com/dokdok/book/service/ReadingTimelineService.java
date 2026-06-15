@@ -1,6 +1,8 @@
 package com.dokdok.book.service;
 
 import com.dokdok.book.dto.request.PreOpinionTimeType;
+import com.dokdok.book.dto.request.TimelineSortType;
+import com.dokdok.book.entity.RecordType;
 import com.dokdok.book.dto.response.*;
 import com.dokdok.book.entity.ReflectionRecordType;
 import com.dokdok.book.entity.PersonalBook;
@@ -63,15 +65,15 @@ public class ReadingTimelineService {
             ReadingTimelineType cursorType,
             Long cursorSourceId,
             Integer size,
-            PreOpinionTimeType preOpinionTime
+            PreOpinionTimeType preOpinionTime,
+            Long gatheringId,
+            RecordType recordType,
+            TimelineSortType sort
     ) {
         Long userId = SecurityUtil.getCurrentUserId();
         PersonalBook personalBook = bookValidator.validatePersonalBook(userId, personalBookId);
 
         Long bookId = personalBook.getBook().getId();
-        Long gatheringId = personalBook.getGathering() != null
-                ? personalBook.getGathering().getId()
-                : null;
 
         int pageSize = resolvePageSize(size);
 
@@ -80,12 +82,16 @@ public class ReadingTimelineService {
         Integer cursorTypeOrder = hasCursor ? cursorType.getOrder() : null;
         Long cursorSourceIdValue = hasCursor ? cursorSourceId : null;
 
+        TimelineSortType resolvedSort = sort != null ? sort : TimelineSortType.DESC;
+
         List<ReadingTimelineIndexRow> indexRows = readingTimelineRepository.findTimeline(
                 personalBookId,
                 userId,
                 bookId,
                 gatheringId,
                 (preOpinionTime != null ? preOpinionTime.name() : PreOpinionTimeType.ANSWER_CREATED.name()),
+                recordType,
+                resolvedSort,
                 cursorEventAtValue,
                 cursorTypeOrder,
                 cursorSourceIdValue,

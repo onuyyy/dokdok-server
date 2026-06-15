@@ -1,9 +1,6 @@
 package com.dokdok.gathering.service;
 
-import com.dokdok.gathering.entity.Gathering;
-import com.dokdok.gathering.entity.GatheringMember;
-import com.dokdok.gathering.entity.GatheringRole;
-import com.dokdok.gathering.entity.GatheringMemberStatus;
+import com.dokdok.gathering.entity.*;
 import com.dokdok.gathering.exception.GatheringErrorCode;
 import com.dokdok.gathering.exception.GatheringException;
 import com.dokdok.gathering.repository.GatheringMemberRepository;
@@ -52,6 +49,10 @@ public class GatheringValidator {
 				.findByGatheringIdAndUserId(gatheringId, userId)
 				.orElseThrow(() -> new GatheringException(GatheringErrorCode.NOT_GATHERING_MEMBER));
 
+		if(member.getMemberStatus() != GatheringMemberStatus.ACTIVE) {
+			throw new GatheringException(GatheringErrorCode.NOT_GATHERING_MEMBER);
+		}
+
 		if (member.getRole() != GatheringRole.LEADER) {
 			throw new GatheringException(GatheringErrorCode.NOT_GATHERING_LEADER);
 		}
@@ -69,9 +70,15 @@ public class GatheringValidator {
 	 * 멤버십을 검증하고 GatheringMember를 반환합니다.
 	 */
 	public GatheringMember validateAndGetMember(Long gatheringId, Long userId) {
-		return gatheringMemberRepository
+		GatheringMember member = gatheringMemberRepository
 				.findByGatheringIdAndUserId(gatheringId, userId)
 				.orElseThrow(() -> new GatheringException(GatheringErrorCode.NOT_GATHERING_MEMBER));
+
+		if(member.getMemberStatus() != GatheringMemberStatus.ACTIVE) {
+			throw new GatheringException(GatheringErrorCode.NOT_GATHERING_MEMBER);
+		}
+
+		return member;
 	}
 
     /**
@@ -85,21 +92,6 @@ public class GatheringValidator {
         return gatheringRepository.findGatheringByInvitationLink(invitationLink)
                 .orElseThrow(() -> new GatheringException(GatheringErrorCode.GATHERING_NOT_FOUND));
     }
-
-    /**
-     * 이미 모임에 가입했거나 가입 신청을 했는지 검증합니다.
-     */
-	public void validateJoinedGathering(Long gatheringId, Long userId) {
-		gatheringMemberRepository
-				.findByGatheringIdAndUserId(gatheringId, userId)
-				.ifPresent(member -> {
-					if (member.getMemberStatus() == GatheringMemberStatus.ACTIVE) {
-						throw new GatheringException(GatheringErrorCode.ALREADY_GATHERING_MEMBER);
-					} else if (member.getMemberStatus() == GatheringMemberStatus.PENDING) {
-						throw new GatheringException(GatheringErrorCode.JOIN_REQUEST_ALREADY_PENDING);
-					}
-				});
-	}
 
 	/**
 	 * 즐겨찾기 된 모임이 4개 이상인지 검증합니다.

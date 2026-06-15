@@ -1,16 +1,15 @@
-name: dokdok
-
 services:
   app:
     profiles: ["app"]
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: dokdok-app
+    container_name: dokdok-${SPRING_PROFILE:-dev}-app
     environment:
       TZ: Asia/Seoul
+      JAVA_OPTS: "-Xmx256m"
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILE}
-      SPRING_DATASOURCE_URL: ${DB_URL:-jdbc:postgresql://postgres:5432/dokdok}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://dokdok-${SPRING_PROFILE:-dev}-postgres:5432/${POSTGRES_DB:-dokdok}
       SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       KAKAO_CLIENT_ID: ${KAKAO_CLIENT_ID}
@@ -22,36 +21,37 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_BUCKET: ${MINIO_BUCKET:-dokdok-storage}
-
     ports:
-      - '8080:8080'
+      - '${APP_PORT:-8080}:8080'
     restart: unless-stopped
     depends_on:
       - postgres
+    mem_limit: 512m
     volumes:
-      - app_logs:/app/logs
+      - /opt/dokdok/${SPRING_PROFILE:-dev}/logs:/opt/dokdok/${SPRING_PROFILE:-dev}/logs
     networks:
-      - dokdok-network
+      - dokdok-shared
 
   postgres:
     profiles: ["app", "local"]
     image: 'postgres:16'
-    container_name: dokdok-postgres
+    container_name: dokdok-${SPRING_PROFILE:-dev}-postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-dokdok}
       POSTGRES_USER: ${POSTGRES_USER:-dokdok}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       TZ: Asia/Seoul
     ports:
-      - '5432:5432'
+      - '${DB_PORT:-5432}:5432'
     restart: unless-stopped
+    mem_limit: 256m
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - dokdok-network
+      - dokdok-shared
 
   minio:
-    profiles: ["app", "local"]
+    profiles: ["shared"]
     image: minio/minio:latest
     container_name: dokdok-minio
     environment:
@@ -63,16 +63,16 @@ services:
     ports:
       - '9000:9000'
       - '9001:9001'
+    mem_limit: 256m
     volumes:
       - minio_data:/data
     networks:
-      - dokdok-network
+      - dokdok-shared
 
 volumes:
-  app_logs:
   postgres_data:
   minio_data:
 
 networks:
-  dokdok-network:
-    driver: bridge
+  dokdok-shared:
+    external: true

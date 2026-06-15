@@ -4,12 +4,16 @@ import com.dokdok.book.api.PersonalBookRecordApi;
 import com.dokdok.book.dto.request.PersonalReadingRecordCreateRequest;
 import com.dokdok.book.dto.request.PersonalReadingRecordUpdateRequest;
 import com.dokdok.book.dto.request.PreOpinionTimeType;
+import com.dokdok.book.dto.request.TimelineSortType;
 import com.dokdok.book.dto.response.*;
+import java.util.List;
+import com.dokdok.book.entity.RecordType;
 import com.dokdok.book.service.PersonalReadingRecordService;
 import com.dokdok.book.service.ReadingTimelineService;
 import com.dokdok.global.response.CursorResponse;
 import com.dokdok.global.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -50,14 +54,17 @@ public class PersonalBookRecordController implements PersonalBookRecordApi {
     @GetMapping("/{personalBookId}/records")
     public ResponseEntity<ApiResponse<CursorPageResponse<PersonalReadingRecordListResponse, ReadingRecordCursor>>> getMyReadingRecords(
             @PathVariable Long personalBookId,
+            @RequestParam(required = false) Long gatheringId,
+            @RequestParam(required = false) RecordType recordType,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
             OffsetDateTime cursorCreatedAt,
             @RequestParam(required = false) Long cursorRecordId,
-            @RequestParam(required = false) Integer size
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false, defaultValue = "DESC") Sort.Direction sort
     ) {
         CursorPageResponse<PersonalReadingRecordListResponse, ReadingRecordCursor> response =
-                personalReadingRecordService.getRecords(personalBookId, cursorCreatedAt, cursorRecordId, size);
+                personalReadingRecordService.getRecords(personalBookId, gatheringId, recordType, cursorCreatedAt, cursorRecordId, size, sort);
         return ApiResponse.success(response, "기록 조회 성공");
 
     }
@@ -72,6 +79,16 @@ public class PersonalBookRecordController implements PersonalBookRecordApi {
     }
 
     @Override
+    @GetMapping("/{personalBookId}/gatherings")
+    public ResponseEntity<ApiResponse<List<PersonalBookGatheringResponse>>> getGatheringsForBook(
+            @PathVariable Long personalBookId) {
+        return ApiResponse.success(
+                personalReadingRecordService.getGatheringsForBook(personalBookId),
+                "책에 연결된 모임 목록 조회 성공"
+        );
+    }
+
+    @Override
     @GetMapping("/{personalBookId}/records/timeline")
     public ResponseEntity<ApiResponse<CursorResponse<ReadingTimelineItem, ReadingTimelineCursor>>> getMyReadingTimeline(
             @PathVariable Long personalBookId,
@@ -81,7 +98,10 @@ public class PersonalBookRecordController implements PersonalBookRecordApi {
             @RequestParam(required = false) ReadingTimelineType cursorType,
             @RequestParam(required = false) Long cursorSourceId,
             @RequestParam(required = false) Integer size,
-            @RequestParam(required = false, defaultValue = "ANSWER_CREATED") PreOpinionTimeType preOpinionTime
+            @RequestParam(required = false, defaultValue = "ANSWER_CREATED") PreOpinionTimeType preOpinionTime,
+            @RequestParam(required = false) Long gatheringId,
+            @RequestParam(required = false) RecordType recordType,
+            @RequestParam(required = false, defaultValue = "DESC") TimelineSortType sort
     ) {
         CursorResponse<ReadingTimelineItem, ReadingTimelineCursor> response =
                 readingTimelineService.getTimeline(
@@ -90,7 +110,10 @@ public class PersonalBookRecordController implements PersonalBookRecordApi {
                         cursorType,
                         cursorSourceId,
                         size,
-                        preOpinionTime
+                        preOpinionTime,
+                        gatheringId,
+                        recordType,
+                        sort
                 );
         return ApiResponse.success(response, "독서 타임라인 조회 성공");
     }

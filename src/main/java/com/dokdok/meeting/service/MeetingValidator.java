@@ -61,7 +61,7 @@ public class MeetingValidator {
      * 사용자의 약속 참여 여부를 확인한다.
      */
     public void validateMeetingMember(Long meetingId, Long userId) {
-        boolean isMeetingMember = meetingMemberRepository.existsByMeetingIdAndUserId(meetingId, userId);
+        boolean isMeetingMember = meetingMemberRepository.existsActiveMemberByMeetingIdAndUserId(meetingId, userId);
 
         if(!isMeetingMember) {
             throw new MeetingException(MeetingErrorCode.NOT_MEETING_MEMBER);

@@ -42,13 +42,17 @@ public class BookReviewService {
                 .map(keywordValidator::validateAndGetSelectableKeyword)
                 .collect(Collectors.toList());
 
-        bookValidator.validateReviewNotExists(bookId, userId);
+        BookReview review = bookReviewRepository.findByBookIdAndUserId(bookId, userId)
+                .map(existing -> {
+                    existing.updateReview(request.rating(), keywords);
+                    return existing;
+                })
+                .orElseGet(() -> {
+                    User user = SecurityUtil.getCurrentUserEntity();
+                    return bookReviewRepository.save(BookReview.create(book, user, request.rating(), keywords));
+                });
 
-        User user = SecurityUtil.getCurrentUserEntity();
-
-        BookReview review = BookReview.create(book, user, request.rating(), keywords);
-
-        return BookReviewResponse.from(bookReviewRepository.save(review));
+        return BookReviewResponse.from(review);
     }
 
     @Transactional(readOnly = true)

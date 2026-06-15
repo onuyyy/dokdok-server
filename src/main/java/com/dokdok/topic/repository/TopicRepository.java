@@ -151,7 +151,7 @@ public interface TopicRepository extends JpaRepository<Topic, Long> {
             @Param("userId") Long userId
     );
 
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("""
                 UPDATE Topic t
                 SET t.likeCount = t.likeCount + 1
@@ -226,6 +226,18 @@ public interface TopicRepository extends JpaRepository<Topic, Long> {
             """)
     List<Topic> findTopicsInfoByMeetingIds(
             @Param("meetingIds") List<Long> meetingIds
+    );
+
+    @Query("""
+            SELECT t
+            FROM Topic t
+            WHERE t.meeting.id = :meetingId
+            AND t.topicStatus = com.dokdok.topic.entity.TopicStatus.PROPOSED
+            AND t.deletedAt IS NULL
+            ORDER BY t.likeCount DESC, t.id ASC
+            """)
+    List<Topic> findAutoConfirmCandidates(
+            @Param("meetingId") Long meetingId
     );
 
     @Query("""
